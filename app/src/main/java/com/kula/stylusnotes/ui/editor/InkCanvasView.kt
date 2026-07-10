@@ -9,6 +9,7 @@ import android.view.MotionEvent
 import android.view.View
 import com.kula.stylusnotes.core.color.InkColor
 import com.kula.stylusnotes.core.color.resolve
+import com.kula.stylusnotes.core.ink.StrokeBounds
 import com.kula.stylusnotes.core.ink.StrokeOp
 import com.kula.stylusnotes.core.ink.UndoStack
 import com.kula.stylusnotes.core.model.CanvasBackground
@@ -35,6 +36,21 @@ class InkCanvasView @JvmOverloads constructor(
     private var activePoints = mutableListOf<StrokePoint>()
     private var isErasing = false
     private var isPassiveContact = false
+
+    // Infinite-canvas view transform: screen = doc * zoom + pan. Strokes are stored in document
+    // coordinates, so panning/zooming never rewrites ink.
+    private var zoom = 1f
+    private var panX = 0f
+    private var panY = 0f
+    private var pendingFitView = false
+
+    // Two-finger pan/pinch-zoom gesture state (screen coordinates).
+    private var navPointerId1 = -1
+    private var navPointerId2 = -1
+    private var navLastX1 = 0f
+    private var navLastY1 = 0f
+    private var navLastX2 = 0f
+    private var navLastY2 = 0f
 
     private val backgroundPaint = Paint()
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -72,7 +88,39 @@ class InkCanvasView @JvmOverloads constructor(
         undoStack.clear()
         canvasBackground = background
         notifyUndoRedoState()
+        resetView()
         invalidate()
+    }
+
+    /**
+     * Zoom-to-fit all ink (centered, never above 1:1), or reset to the origin at 1:1 for an
+     * empty note. Deferred to first layout if the view isn't measured yet.
+     */
+    fun resetView() {
+        if (width == 0 || height == 0) {
+            pendingFitView = true
+            return
+        }
+        if (strokes.isEmpty()) {
+            zoom = 1f
+            panX = 0f
+            panY = 0f
+            invalidate()
+            return
+        }
+        val bounds = StrokeBounds.contentBounds(strokes, FIT_PADDING_PX, 1f, 1f)
+        zoom = minOf(width / bounds.width, height / bounds.height, 1f).coerceAtLeast(MIN_ZOOM)
+        panX = (width - bounds.width * zoom) / 2f - bounds.left * zoom
+        panY = (height - bounds.height * zoom) / 2f - bounds.top * zoom
+        invalidate()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (pendingFitView) {
+            pendingFitView = false
+            resetView()
+        }
     }
 
     fun getStrokes(): List<Stroke> = strokes.toList()
@@ -120,18 +168,34 @@ class InkCanvasView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                // Palm rejection: once a pen stroke is active, every other pointer
-                // (a resting palm reported as TOOL_TYPE_FINGER) is swallowed and ignored.
-                if (activeStylusPointerId != -1) return true
                 val isActivePenTool = toolType == MotionEvent.TOOL_TYPE_STYLUS ||
                     toolType == MotionEvent.TOOL_TYPE_ERASER
+                val isSmallFingerContact = !isActivePenTool &&
+                    toolType == MotionEvent.TOOL_TYPE_FINGER &&
+                    contactMajorMm(event, actionIndex) <= PASSIVE_ACCEPT_MAX_CONTACT_MM
+
+                if (activeStylusPointerId != -1) {
+                    // A stroke is in progress. A second small contact while the stroke itself is
+                    // a passive (finger-classified) one means the user planted two fingers to
+                    // pan/zoom, not to write — discard the stroke and start navigating. With an
+                    // active stylus the pen keeps priority, and everything else — palms
+                    // included — is swallowed and ignored (palm rejection).
+                    if (isPassiveContact && isSmallFingerContact) {
+                        val firstPointerId = activeStylusPointerId
+                        cancelActiveStroke()
+                        startNavigation(event, firstPointerId, event.getPointerId(actionIndex))
+                    }
+                    return true
+                }
+                if (navPointerId1 != -1) return true // already navigating; extra pointers ignored
+
                 if (!isActivePenTool) {
                     if (toolType != MotionEvent.TOOL_TYPE_FINGER) return false
                     // Passive-stylus support (e.g. Moto G Stylus 2024/2025, whose capacitive pen
                     // is reported as TOOL_TYPE_FINGER): tool type can't tell pen from palm, so
                     // fall back to contact size — a pen tip or fingertip is a small contact, a
                     // resting palm a large one. Large contacts are swallowed without drawing.
-                    if (contactMajorMm(event, actionIndex) > PASSIVE_ACCEPT_MAX_CONTACT_MM) return true
+                    if (!isSmallFingerContact) return true
                 }
                 activeStylusPointerId = event.getPointerId(actionIndex)
                 isPassiveContact = !isActivePenTool
@@ -140,7 +204,7 @@ class InkCanvasView @JvmOverloads constructor(
                     toolType == MotionEvent.TOOL_TYPE_ERASER ||
                     (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
                 if (isErasing) {
-                    eraseNear(event.getX(actionIndex), event.getY(actionIndex))
+                    eraseNear(toDocX(event.getX(actionIndex)), toDocY(event.getY(actionIndex)))
                 } else {
                     activePoints = mutableListOf(pointFrom(event, actionIndex))
                 }
@@ -148,23 +212,26 @@ class InkCanvasView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (navPointerId1 != -1) {
+                    handleNavigationMove(event)
+                    return true
+                }
                 val pointerIndex = event.findPointerIndex(activeStylusPointerId)
                 if (pointerIndex == -1) return true
                 if (isPassiveContact && contactMajorMm(event, pointerIndex) > PASSIVE_CANCEL_CONTACT_MM) {
                     // The contact flattened out into a palm mid-stroke: it was never a pen tip.
                     // Discard the in-progress stroke instead of committing it.
-                    activeStylusPointerId = -1
-                    activePoints = mutableListOf()
-                    isErasing = false
-                    isPassiveContact = false
-                    invalidate()
+                    cancelActiveStroke()
                     return true
                 }
                 if (isErasing) {
                     for (h in 0 until event.historySize) {
-                        eraseNear(event.getHistoricalX(pointerIndex, h), event.getHistoricalY(pointerIndex, h))
+                        eraseNear(
+                            toDocX(event.getHistoricalX(pointerIndex, h)),
+                            toDocY(event.getHistoricalY(pointerIndex, h))
+                        )
                     }
-                    eraseNear(event.getX(pointerIndex), event.getY(pointerIndex))
+                    eraseNear(toDocX(event.getX(pointerIndex)), toDocY(event.getY(pointerIndex)))
                 } else {
                     for (h in 0 until event.historySize) {
                         activePoints.add(historicalPointFrom(event, pointerIndex, h))
@@ -176,7 +243,16 @@ class InkCanvasView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                if (event.getPointerId(actionIndex) != activeStylusPointerId) return true
+                val pointerId = event.getPointerId(actionIndex)
+                if (pointerId == navPointerId1 || pointerId == navPointerId2 ||
+                    (navPointerId1 != -1 && event.actionMasked == MotionEvent.ACTION_CANCEL)
+                ) {
+                    // End the pan/zoom gesture; a finger that stays down is ignored until lifted.
+                    navPointerId1 = -1
+                    navPointerId2 = -1
+                    return true
+                }
+                if (pointerId != activeStylusPointerId) return true
                 if (!isErasing && activePoints.isNotEmpty() && event.actionMasked != MotionEvent.ACTION_CANCEL) {
                     finishStroke()
                 }
@@ -201,9 +277,67 @@ class InkCanvasView @JvmOverloads constructor(
         return majorPx / (resources.displayMetrics.xdpi / MM_PER_INCH)
     }
 
+    private fun toDocX(screenX: Float) = (screenX - panX) / zoom
+
+    private fun toDocY(screenY: Float) = (screenY - panY) / zoom
+
+    private fun cancelActiveStroke() {
+        activeStylusPointerId = -1
+        activePoints = mutableListOf()
+        isErasing = false
+        isPassiveContact = false
+        invalidate()
+    }
+
+    private fun startNavigation(event: MotionEvent, pointerId1: Int, pointerId2: Int) {
+        val index1 = event.findPointerIndex(pointerId1)
+        val index2 = event.findPointerIndex(pointerId2)
+        if (index1 == -1 || index2 == -1) return
+        navPointerId1 = pointerId1
+        navPointerId2 = pointerId2
+        navLastX1 = event.getX(index1)
+        navLastY1 = event.getY(index1)
+        navLastX2 = event.getX(index2)
+        navLastY2 = event.getY(index2)
+    }
+
+    private fun handleNavigationMove(event: MotionEvent) {
+        val index1 = event.findPointerIndex(navPointerId1)
+        val index2 = event.findPointerIndex(navPointerId2)
+        if (index1 == -1 || index2 == -1) return
+        val x1 = event.getX(index1)
+        val y1 = event.getY(index1)
+        val x2 = event.getX(index2)
+        val y2 = event.getY(index2)
+
+        val previousSpan = hypot((navLastX2 - navLastX1).toDouble(), (navLastY2 - navLastY1).toDouble()).toFloat()
+        val currentSpan = hypot((x2 - x1).toDouble(), (y2 - y1).toDouble()).toFloat()
+        val newZoom = if (previousSpan > 1e-3f) {
+            (zoom * currentSpan / previousSpan).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        } else {
+            zoom
+        }
+        // Keep the document point under the gesture focal point fixed while zooming, then apply
+        // the focal point's own travel as a pan.
+        val zoomRatio = newZoom / zoom
+        val previousFocalX = (navLastX1 + navLastX2) / 2f
+        val previousFocalY = (navLastY1 + navLastY2) / 2f
+        val focalX = (x1 + x2) / 2f
+        val focalY = (y1 + y2) / 2f
+        panX = focalX - zoomRatio * (previousFocalX - panX)
+        panY = focalY - zoomRatio * (previousFocalY - panY)
+        zoom = newZoom
+
+        navLastX1 = x1
+        navLastY1 = y1
+        navLastX2 = x2
+        navLastY2 = y2
+        invalidate()
+    }
+
     private fun pointFrom(event: MotionEvent, pointerIndex: Int) = StrokePoint(
-        x = event.getX(pointerIndex),
-        y = event.getY(pointerIndex),
+        x = toDocX(event.getX(pointerIndex)),
+        y = toDocY(event.getY(pointerIndex)),
         pressure = event.getPressure(pointerIndex),
         tiltRadians = event.getAxisValue(MotionEvent.AXIS_TILT, pointerIndex),
         orientationRadians = event.getOrientation(pointerIndex),
@@ -211,8 +345,8 @@ class InkCanvasView @JvmOverloads constructor(
     )
 
     private fun historicalPointFrom(event: MotionEvent, pointerIndex: Int, historyIndex: Int) = StrokePoint(
-        x = event.getHistoricalX(pointerIndex, historyIndex),
-        y = event.getHistoricalY(pointerIndex, historyIndex),
+        x = toDocX(event.getHistoricalX(pointerIndex, historyIndex)),
+        y = toDocY(event.getHistoricalY(pointerIndex, historyIndex)),
         pressure = event.getHistoricalPressure(pointerIndex, historyIndex),
         tiltRadians = event.getHistoricalAxisValue(MotionEvent.AXIS_TILT, pointerIndex, historyIndex),
         orientationRadians = event.getHistoricalOrientation(pointerIndex, historyIndex),
@@ -232,9 +366,11 @@ class InkCanvasView @JvmOverloads constructor(
         notifyStrokesChanged()
     }
 
+    /** [x]/[y] are document coordinates; the touch radius shrinks as the view zooms in. */
     private fun eraseNear(x: Float, y: Float) {
+        val radius = ERASE_TOUCH_RADIUS_PX / zoom
         val index = strokes.indexOfLast { stroke ->
-            stroke.points.any { hypot((it.x - x).toDouble(), (it.y - y).toDouble()) <= ERASE_TOUCH_RADIUS_PX }
+            stroke.points.any { hypot((it.x - x).toDouble(), (it.y - y).toDouble()) <= radius }
         }
         if (index == -1) return
         val removed = strokes.removeAt(index)
@@ -246,12 +382,16 @@ class InkCanvasView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
+        canvas.save()
+        canvas.translate(panX, panY)
+        canvas.scale(zoom, zoom)
         for (stroke in strokes) {
             drawStroke(canvas, stroke.color.resolve(canvasBackground), stroke.baseWidthPx, stroke.points)
         }
         if (!isErasing && activePoints.isNotEmpty()) {
             drawStroke(canvas, currentInkColor.resolve(canvasBackground), BASE_STROKE_WIDTH_PX, activePoints)
         }
+        canvas.restore()
     }
 
     private fun drawStroke(canvas: Canvas, color: Int, baseWidthPx: Float, points: List<StrokePoint>) {
@@ -269,5 +409,9 @@ class InkCanvasView @JvmOverloads constructor(
         // pen stroke isn't dropped by sensor noise).
         private const val PASSIVE_ACCEPT_MAX_CONTACT_MM = 8f
         private const val PASSIVE_CANCEL_CONTACT_MM = 11f
+
+        private const val MIN_ZOOM = 0.2f
+        private const val MAX_ZOOM = 8f
+        private const val FIT_PADDING_PX = 48f
     }
 }

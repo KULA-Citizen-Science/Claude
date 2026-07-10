@@ -1,10 +1,12 @@
 # Stylus Notes
 
 A simple, local-only Android notetaking app built for handwriting with a stylus (developed
-against the Motorola Stylus 5G, 2024). Draw freeform ink with pressure-sensitive strokes, switch
-between a white or black canvas, pick from an ink color palette that stays legible on either
-background, and export a note as a PNG or PDF sized for handwriting recognition by an LLM (e.g.
-uploading to Claude for HTR).
+against the Motorola Stylus 5G, 2024). Draw freeform ink with pressure-sensitive strokes on an
+infinite canvas (two-finger pan and pinch-zoom, with a Fit button to jump back to all your ink),
+switch between a white or black canvas, pick from an ink color palette that stays legible on
+either background, and export a note as a PNG or PDF sized for handwriting recognition by an LLM
+(e.g. uploading to Claude for HTR). Exports crop to the bounding box of the ink plus a margin,
+not the screen.
 
 ## Project structure
 
@@ -59,6 +61,11 @@ device) after building and installing the app:
       strokes persisted (autosave).
 - [ ] Rename a note — tap its title in the editor top bar, and use Rename on a note card in the
       list — and confirm the new title shows in both places after reopening the app.
+- [ ] Pan with two fingers and pinch-zoom in/out; write while zoomed in and confirm the ink lands
+      where the pen touches. Tap Fit and confirm the view returns to showing all ink. Reopen the
+      note and confirm it opens fitted to the ink.
+- [ ] Write beyond one screenful (pan, keep writing), export, and confirm the export contains all
+      of it — the exported page is the ink's bounding box, not the screen.
 - [ ] Export a note as PNG and as PDF; open each file and confirm the ink is legible — this is the
       format that gets shared to an LLM (e.g. Claude) for handwriting recognition, so legibility
       here is the actual acceptance bar.
@@ -76,6 +83,13 @@ device) after building and installing the app:
   active pen in the 2026 model): tool type can't distinguish pen from palm, so palm rejection
   falls back to contact size. Contacts smaller than ~8 mm draw; larger ones are ignored, and an
   in-progress stroke whose contact grows past ~11 mm is discarded as a palm.
+
+**Canvas navigation:** notes live on an infinite canvas. Two small contacts at once (two
+fingertips) pan the view, and moving them apart/together pinch-zooms around the gesture's focal
+point; a stroke just started by the first finger is discarded when the second lands, since the
+gesture was navigation, not writing. Large (palm) contacts never join navigation. With an active
+stylus, the pen keeps absolute priority — finger gestures are ignored while a pen stroke is in
+progress. The editor's Fit button zooms back out to show all ink (notes also reopen fitted).
 
 Consequences of the passive path to be aware of: a deliberate small fingertip contact can also
 draw (indistinguishable from a passive pen tip); pressure-sensitive width is flat because

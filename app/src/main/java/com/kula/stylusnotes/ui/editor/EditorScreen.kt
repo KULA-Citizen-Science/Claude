@@ -18,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -169,6 +170,12 @@ fun EditorScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            // Rescue hatch for the infinite canvas: zoom back out to fit all ink.
+            SmallFloatingActionButton(onClick = { canvasView.resetView() }) {
+                Text(stringResource(R.string.action_fit_view))
+            }
         }
     ) { padding ->
         AndroidView(

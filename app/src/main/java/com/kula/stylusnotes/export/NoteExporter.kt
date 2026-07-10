@@ -10,6 +10,7 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.kula.stylusnotes.core.color.resolve
+import com.kula.stylusnotes.core.ink.StrokeBounds
 import com.kula.stylusnotes.core.model.CanvasBackground
 import com.kula.stylusnotes.core.model.Stroke
 import com.kula.stylusnotes.ink.StrokeRenderer
@@ -18,20 +19,38 @@ import java.io.FileOutputStream
 
 /**
  * Renders a note for handwriting-to-text recognition by an LLM: always onto a plain white
- * background at a fixed high resolution, regardless of the on-screen editing theme (Adaptive
- * ink automatically resolves to black on white here, same as it would on-screen against white).
+ * background at high resolution, regardless of the on-screen editing theme (Adaptive ink
+ * automatically resolves to black on white here, same as it would on-screen against white).
+ * With the infinite canvas, the exported page is the bounding box of all ink plus padding —
+ * not the screen — capped at [MAX_EXPORT_DIMENSION_PX] per side so a sprawling note can't
+ * allocate an unbounded bitmap.
  */
 object NoteExporter {
 
     private const val EXPORT_SCALE = 2f
+    private const val EXPORT_PADDING_PX = 32f
+    private const val MAX_EXPORT_DIMENSION_PX = 4096f
 
-    fun renderToBitmap(strokes: List<Stroke>, widthPx: Int, heightPx: Int): Bitmap {
-        val scaledWidth = (widthPx * EXPORT_SCALE).toInt().coerceAtLeast(1)
-        val scaledHeight = (heightPx * EXPORT_SCALE).toInt().coerceAtLeast(1)
+    /** [fallbackWidthPx]/[fallbackHeightPx] size the page only when the note has no ink. */
+    fun renderToBitmap(strokes: List<Stroke>, fallbackWidthPx: Int, fallbackHeightPx: Int): Bitmap {
+        val bounds = StrokeBounds.contentBounds(
+            strokes = strokes,
+            paddingPx = EXPORT_PADDING_PX,
+            minWidthPx = fallbackWidthPx.toFloat().coerceAtLeast(1f),
+            minHeightPx = fallbackHeightPx.toFloat().coerceAtLeast(1f)
+        )
+        val scale = minOf(
+            EXPORT_SCALE,
+            MAX_EXPORT_DIMENSION_PX / bounds.width,
+            MAX_EXPORT_DIMENSION_PX / bounds.height
+        )
+        val scaledWidth = (bounds.width * scale).toInt().coerceAtLeast(1)
+        val scaledHeight = (bounds.height * scale).toInt().coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(CanvasBackground.WHITE.argb)
-        canvas.scale(EXPORT_SCALE, EXPORT_SCALE)
+        canvas.scale(scale, scale)
+        canvas.translate(-bounds.left, -bounds.top)
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -53,14 +72,14 @@ object NoteExporter {
     }
 
     fun exportPng(context: Context, title: String, strokes: List<Stroke>, widthPx: Int, heightPx: Int): Uri {
-        val bitmap = renderToBitmap(strokes, widthPx, heightPx)
+        val bitmap = renderToBitmap(strokes, fallbackWidthPx = widthPx, fallbackHeightPx = heightPx)
         val file = exportFile(context, title, "png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
         return uriFor(context, file)
     }
 
     fun exportPdf(context: Context, title: String, strokes: List<Stroke>, widthPx: Int, heightPx: Int): Uri {
-        val bitmap = renderToBitmap(strokes, widthPx, heightPx)
+        val bitmap = renderToBitmap(strokes, fallbackWidthPx = widthPx, fallbackHeightPx = heightPx)
         val document = PdfDocument()
         // Page matches the bitmap's full (supersampled) resolution rather than the original
         // on-screen size, so the exported PDF keeps the same detail as the PNG export.

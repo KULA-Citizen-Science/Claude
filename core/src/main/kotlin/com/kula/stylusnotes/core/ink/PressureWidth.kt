@@ -9,4 +9,7 @@ object PressureWidth {
         val factor = MIN_WIDTH_FACTOR + clamped * (MAX_WIDTH_FACTOR - MIN_WIDTH_FACTOR)
         return baseWidthPx * factor
     }
+
+    /** Widest a stroke of [baseWidthPx] can render at any pressure; used for bounds inflation. */
+    fun maxWidthFor(baseWidthPx: Float): Float = baseWidthPx * MAX_WIDTH_FACTOR
 }
