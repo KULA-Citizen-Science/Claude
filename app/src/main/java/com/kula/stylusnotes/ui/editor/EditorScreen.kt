@@ -14,6 +14,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,6 +59,7 @@ fun EditorScreen(
 
     var canUndo by remember { mutableStateOf(false) }
     var canRedo by remember { mutableStateOf(false) }
+    var eraseMode by remember { mutableStateOf(false) }
     var currentColor by remember { mutableStateOf<InkColor>(InkColor.Adaptive) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
@@ -94,6 +96,22 @@ fun EditorScreen(
                     }
                     IconButton(onClick = { canvasView.redo() }, enabled = canRedo) {
                         Text("↷")
+                    }
+                    // Manual eraser toggle: a passive stylus (Moto G Stylus 2024/2025) has no
+                    // barrel button or eraser tip, so this is its only way to erase.
+                    IconButton(onClick = {
+                        eraseMode = !eraseMode
+                        canvasView.manualEraseMode = eraseMode
+                    }) {
+                        Text(
+                            text = "⌫",
+                            color = if (eraseMode) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                LocalContentColor.current
+                            },
+                            fontWeight = if (eraseMode) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                     IconButton(onClick = {
                         val newBackground = uiState.background.toggled()

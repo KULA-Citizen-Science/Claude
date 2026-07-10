@@ -34,6 +34,7 @@ class InkCanvasView @JvmOverloads constructor(
     private var activeStylusPointerId = -1
     private var activePoints = mutableListOf<StrokePoint>()
     private var isErasing = false
+    private var isPassiveContact = false
 
     private val backgroundPaint = Paint()
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -51,6 +52,12 @@ class InkCanvasView @JvmOverloads constructor(
         }
 
     var currentInkColor: InkColor = InkColor.Adaptive
+
+    /**
+     * When set (from the toolbar eraser toggle), accepted pointers erase instead of draw. This is
+     * the only way to erase with a passive stylus, which has no barrel button or eraser tip.
+     */
+    var manualEraseMode: Boolean = false
 
     var onStrokesChanged: ((List<Stroke>) -> Unit)? = null
     var onUndoRedoStateChanged: ((canUndo: Boolean, canRedo: Boolean) -> Unit)? = null
@@ -113,15 +120,24 @@ class InkCanvasView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                // Palm rejection: once a stylus stroke is active, every other pointer
+                // Palm rejection: once a pen stroke is active, every other pointer
                 // (a resting palm reported as TOOL_TYPE_FINGER) is swallowed and ignored.
                 if (activeStylusPointerId != -1) return true
-                if (toolType != MotionEvent.TOOL_TYPE_STYLUS && toolType != MotionEvent.TOOL_TYPE_ERASER) {
-                    return toolType == MotionEvent.TOOL_TYPE_FINGER
+                val isActivePenTool = toolType == MotionEvent.TOOL_TYPE_STYLUS ||
+                    toolType == MotionEvent.TOOL_TYPE_ERASER
+                if (!isActivePenTool) {
+                    if (toolType != MotionEvent.TOOL_TYPE_FINGER) return false
+                    // Passive-stylus support (e.g. Moto G Stylus 2024/2025, whose capacitive pen
+                    // is reported as TOOL_TYPE_FINGER): tool type can't tell pen from palm, so
+                    // fall back to contact size — a pen tip or fingertip is a small contact, a
+                    // resting palm a large one. Large contacts are swallowed without drawing.
+                    if (contactMajorMm(event, actionIndex) > PASSIVE_ACCEPT_MAX_CONTACT_MM) return true
                 }
                 activeStylusPointerId = event.getPointerId(actionIndex)
+                isPassiveContact = !isActivePenTool
                 requestUnbufferedDispatch(event)
-                isErasing = toolType == MotionEvent.TOOL_TYPE_ERASER ||
+                isErasing = manualEraseMode ||
+                    toolType == MotionEvent.TOOL_TYPE_ERASER ||
                     (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
                 if (isErasing) {
                     eraseNear(event.getX(actionIndex), event.getY(actionIndex))
@@ -134,6 +150,16 @@ class InkCanvasView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 val pointerIndex = event.findPointerIndex(activeStylusPointerId)
                 if (pointerIndex == -1) return true
+                if (isPassiveContact && contactMajorMm(event, pointerIndex) > PASSIVE_CANCEL_CONTACT_MM) {
+                    // The contact flattened out into a palm mid-stroke: it was never a pen tip.
+                    // Discard the in-progress stroke instead of committing it.
+                    activeStylusPointerId = -1
+                    activePoints = mutableListOf()
+                    isErasing = false
+                    isPassiveContact = false
+                    invalidate()
+                    return true
+                }
                 if (isErasing) {
                     for (h in 0 until event.historySize) {
                         eraseNear(event.getHistoricalX(pointerIndex, h), event.getHistoricalY(pointerIndex, h))
@@ -157,11 +183,22 @@ class InkCanvasView @JvmOverloads constructor(
                 activeStylusPointerId = -1
                 activePoints = mutableListOf()
                 isErasing = false
+                isPassiveContact = false
                 invalidate()
                 return true
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    /**
+     * Major axis of the touch contact in millimetres, or 0 if the device doesn't report contact
+     * size (returning 0 accepts the pointer — with no size data there is nothing to reject on).
+     */
+    private fun contactMajorMm(event: MotionEvent, pointerIndex: Int): Float {
+        val majorPx = event.getTouchMajor(pointerIndex)
+        if (majorPx <= 0f) return 0f
+        return majorPx / (resources.displayMetrics.xdpi / MM_PER_INCH)
     }
 
     private fun pointFrom(event: MotionEvent, pointerIndex: Int) = StrokePoint(
@@ -224,5 +261,13 @@ class InkCanvasView @JvmOverloads constructor(
     companion object {
         private const val BASE_STROKE_WIDTH_PX = 6f
         private const val ERASE_TOUCH_RADIUS_PX = 24f
+        private const val MM_PER_INCH = 25.4f
+
+        // Contact-size palm rejection for passive styluses: a pen tip is ~2-4 mm and a fingertip
+        // ~6-9 mm, while a resting palm is well past 10 mm. Accept below 8 mm, and cancel an
+        // in-progress passive stroke if the contact grows past 11 mm (hysteresis so a normal
+        // pen stroke isn't dropped by sensor noise).
+        private const val PASSIVE_ACCEPT_MAX_CONTACT_MM = 8f
+        private const val PASSIVE_CANCEL_CONTACT_MM = 11f
     }
 }

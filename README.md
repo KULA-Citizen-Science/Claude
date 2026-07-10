@@ -48,8 +48,8 @@ device) after building and installing the app:
       pressure.
 - [ ] Rest a palm on the screen while writing; confirm the palm doesn't produce marks or interrupt
       the stroke (palm rejection).
-- [ ] Use the stylus's barrel button (or a dedicated eraser tip, if the stylus has one) to erase a
-      stroke.
+- [ ] Erase a stroke: with an active stylus, use the barrel button (or dedicated eraser tip); with
+      a passive stylus, use the ⌫ eraser toggle in the editor toolbar.
 - [ ] Undo/redo a few strokes and confirm the canvas updates correctly each time.
 - [ ] Toggle the canvas background between white and black; confirm ink drawn with "Adaptive"
       color flips to stay visible on both.
@@ -62,10 +62,25 @@ device) after building and installing the app:
       here is the actual acceptance bar.
 - [ ] Delete a note from the note list and confirm it's gone after reopening the app.
 
-### Note on emulator testing without a physical stylus
+### How stylus input and palm rejection work
 
-`InkCanvasView` only draws for `MotionEvent.TOOL_TYPE_STYLUS` / `TOOL_TYPE_ERASER` — plain finger
-or mouse taps are intentionally ignored (that's the palm-rejection mechanism). A host mouse click
-in a stock Android Studio emulator is normally reported as a finger touch, so it won't draw. To
-test in an emulator without physical hardware, use the emulator's stylus/S-Pen input simulation
-under Extended Controls (where available), rather than a plain mouse click.
+`InkCanvasView` accepts two kinds of pointers:
+
+- **Active stylus** (`MotionEvent.TOOL_TYPE_STYLUS` / `TOOL_TYPE_ERASER`): always draws, with
+  pressure-sensitive width, barrel-button erase, and strict palm rejection — while a stylus
+  stroke is active, every other pointer is swallowed.
+- **Passive/capacitive stylus** (reported by Android as `TOOL_TYPE_FINGER` — this is what the
+  built-in pen on the Moto G Stylus 2024/2025 and earlier is; Motorola only switched to an
+  active pen in the 2026 model): tool type can't distinguish pen from palm, so palm rejection
+  falls back to contact size. Contacts smaller than ~8 mm draw; larger ones are ignored, and an
+  in-progress stroke whose contact grows past ~11 mm is discarded as a palm.
+
+Consequences of the passive path to be aware of: a deliberate small fingertip contact can also
+draw (indistinguishable from a passive pen tip); pressure-sensitive width is flat because
+passive pens report no meaningful pressure; and the toolbar ⌫ eraser toggle exists because a
+passive pen has no barrel button or eraser tip. On devices whose touchscreen doesn't report
+contact size at all, size-based rejection is disabled and small/large contacts all draw.
+
+In a stock Android Studio emulator a host mouse click is reported as a finger touch, so it will
+draw via the passive path; the emulator's stylus/S-Pen input simulation under Extended Controls
+(where available) exercises the active-stylus path instead.
