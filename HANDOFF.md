@@ -1,6 +1,7 @@
 # Handoff: first real build of the `:app` module
 
-This branch (`claude/android-stylus-notes-app-xz97wj`) contains a complete v1 scaffold of the
+This scaffold lives on `claude/android-stylus-notes-app-xz97wj` and `main`, which point at the
+same commit — whichever branch your session started on, you have the complete v1 scaffold of the
 Stylus Notes app. It was written in a sandbox where `dl.google.com` (Google's Maven repo and
 Android SDK host) was unreachable, so:
 
@@ -75,7 +76,9 @@ exports always rendered on white.
 - [ ] `./gradlew assembleDebug` succeeds
 - [ ] `./gradlew test` fully green (the 16 `:core` tests must stay passing)
 - [ ] `app/build/outputs/apk/debug/app-debug.apk` exists; report its path and size
-- [ ] All fixes committed and pushed to `claude/android-stylus-notes-app-xz97wj`
+- [ ] All fixes committed and pushed — prefer `claude/android-stylus-notes-app-xz97wj`, but if the
+      session's git proxy only allows pushing to the session's own working branch, push there and
+      report the branch name
 - [ ] Reply lists any behavior-relevant changes made beyond mechanical compile fixes
 
 On-device verification (pressure, palm rejection, latency) still needs the physical Motorola
