@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -41,6 +43,7 @@ import com.kula.stylusnotes.core.color.InkColor
 import com.kula.stylusnotes.core.color.InkPalette
 import com.kula.stylusnotes.core.model.CanvasBackground
 import com.kula.stylusnotes.export.NoteExporter
+import com.kula.stylusnotes.ui.RenameNoteDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,6 +66,7 @@ fun EditorScreen(
     var currentColor by remember { mutableStateOf<InkColor>(InkColor.Adaptive) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
 
     val canvasView = remember {
         InkCanvasView(context).apply {
@@ -86,7 +90,16 @@ fun EditorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.title) },
+                title = {
+                    Text(
+                        text = uiState.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(enabled = uiState.isLoaded) {
+                            showRenameDialog = true
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 },
@@ -163,6 +176,17 @@ fun EditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+        )
+    }
+
+    if (showRenameDialog) {
+        RenameNoteDialog(
+            currentTitle = uiState.title,
+            onConfirm = { newTitle ->
+                viewModel.rename(newTitle)
+                showRenameDialog = false
+            },
+            onDismiss = { showRenameDialog = false }
         )
     }
 }

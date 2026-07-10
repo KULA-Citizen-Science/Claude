@@ -12,4 +12,10 @@
     <string name="export_as_png">Export as PNG</string>
     <string name="export_as_pdf">Export as PDF</string>
     <string name="ink_color_adaptive">Adaptive (auto-contrast)</string>
+    <string name="rename_note">Rename note</string>
+    <string name="rename_note_label">Title</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
 </resources>

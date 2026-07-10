@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -30,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kula.stylusnotes.R
 import com.kula.stylusnotes.data.repository.NoteSummary
+import com.kula.stylusnotes.ui.RenameNoteDialog
 import java.text.DateFormat
 import java.util.Date
 
@@ -40,6 +45,7 @@ fun NoteListScreen(
     onOpenNote: (String) -> Unit
 ) {
     val notes by viewModel.notes.collectAsState()
+    var renameTarget by remember { mutableStateOf<NoteSummary?>(null) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.note_list_title)) }) },
@@ -68,16 +74,33 @@ fun NoteListScreen(
                     NoteCard(
                         note = note,
                         onClick = { onOpenNote(note.id) },
+                        onRename = { renameTarget = note },
                         onDelete = { viewModel.deleteNote(note.id) }
                     )
                 }
             }
         }
     }
+
+    renameTarget?.let { note ->
+        RenameNoteDialog(
+            currentTitle = note.title,
+            onConfirm = { newTitle ->
+                viewModel.renameNote(note.id, newTitle)
+                renameTarget = null
+            },
+            onDismiss = { renameTarget = null }
+        )
+    }
 }
 
 @Composable
-private fun NoteCard(note: NoteSummary, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun NoteCard(
+    note: NoteSummary,
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
     ElevatedCard(onClick = onClick) {
         Column(Modifier.padding(16.dp)) {
             Text(note.title, fontWeight = FontWeight.SemiBold, maxLines = 2)
@@ -87,8 +110,13 @@ private fun NoteCard(note: NoteSummary, onClick: () -> Unit, onDelete: () -> Uni
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
-                Text("Delete")
+            Row(Modifier.fillMaxWidth()) {
+                TextButton(onClick = onRename, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.action_rename))
+                }
+                TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.action_delete))
+                }
             }
         }
     }

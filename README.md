@@ -57,6 +57,8 @@ device) after building and installing the app:
       black canvas.
 - [ ] Create a note, add strokes, leave the editor (back button), reopen the note, and confirm the
       strokes persisted (autosave).
+- [ ] Rename a note — tap its title in the editor top bar, and use Rename on a note card in the
+      list — and confirm the new title shows in both places after reopening the app.
 - [ ] Export a note as PNG and as PDF; open each file and confirm the ink is legible — this is the
       format that gets shared to an LLM (e.g. Claude) for handwriting recognition, so legibility
       here is the actual acceptance bar.

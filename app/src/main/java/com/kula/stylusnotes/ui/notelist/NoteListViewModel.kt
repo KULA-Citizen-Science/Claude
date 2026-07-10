@@ -21,6 +21,12 @@ class NoteListViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
+    fun renameNote(noteId: String, title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch { repository.renameNote(noteId, trimmed) }
+    }
+
     fun deleteNote(noteId: String) {
         viewModelScope.launch { repository.deleteNote(noteId) }
     }

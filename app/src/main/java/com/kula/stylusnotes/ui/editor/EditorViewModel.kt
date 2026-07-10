@@ -41,6 +41,14 @@ class EditorViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
+    fun rename(title: String) {
+        val noteId = _uiState.value.noteId ?: return
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return
+        _uiState.value = _uiState.value.copy(title = trimmed)
+        viewModelScope.launch { repository.renameNote(noteId, trimmed) }
+    }
+
     fun onBackgroundToggled(background: CanvasBackground) {
         _uiState.value = _uiState.value.copy(background = background)
         persist(debounce = false)
