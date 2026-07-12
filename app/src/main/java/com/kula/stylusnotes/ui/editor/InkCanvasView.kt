@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -17,7 +18,9 @@ import com.kula.stylusnotes.core.model.Stroke
 import com.kula.stylusnotes.core.model.StrokePoint
 import com.kula.stylusnotes.ink.StrokeRenderer
 import java.util.UUID
+import kotlin.math.floor
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 /**
  * Freehand ink surface driven by [onTouchEvent] rather than Compose gestures, because only the
@@ -60,6 +63,23 @@ class InkCanvasView @JvmOverloads constructor(
     }
     private val scratchPath = Path()
 
+    private val density = resources.displayMetrics.density
+
+    // Ruled guide lines and the zoom chip are on-screen aids only; NoteExporter never draws
+    // them, so exports stay clean white pages for handwriting recognition.
+    private val ruleLinePaint = Paint().apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 0f // hairline: stays one pixel on screen at any canvas scale
+    }
+    private val zoomChipBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x99222222.toInt()
+    }
+    private val zoomChipTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = 12f * density
+    }
+    private val zoomChipRect = RectF()
+
     var canvasBackground: CanvasBackground = CanvasBackground.WHITE
         set(value) {
             field = value
@@ -68,6 +88,9 @@ class InkCanvasView @JvmOverloads constructor(
         }
 
     var currentInkColor: InkColor = InkColor.Adaptive
+
+    /** Base width (document px) for newly drawn strokes; existing strokes keep their own. */
+    var currentStrokeWidthPx: Float = BASE_STROKE_WIDTH_PX
 
     /**
      * When set (from the toolbar eraser toggle), accepted pointers erase instead of draw. This is
@@ -357,7 +380,7 @@ class InkCanvasView @JvmOverloads constructor(
         val stroke = Stroke(
             id = UUID.randomUUID().toString(),
             color = currentInkColor,
-            baseWidthPx = BASE_STROKE_WIDTH_PX,
+            baseWidthPx = currentStrokeWidthPx,
             points = activePoints.toList()
         )
         strokes.add(stroke)
@@ -385,13 +408,53 @@ class InkCanvasView @JvmOverloads constructor(
         canvas.save()
         canvas.translate(panX, panY)
         canvas.scale(zoom, zoom)
+        drawRuleLines(canvas)
         for (stroke in strokes) {
             drawStroke(canvas, stroke.color.resolve(canvasBackground), stroke.baseWidthPx, stroke.points)
         }
         if (!isErasing && activePoints.isNotEmpty()) {
-            drawStroke(canvas, currentInkColor.resolve(canvasBackground), BASE_STROKE_WIDTH_PX, activePoints)
+            drawStroke(canvas, currentInkColor.resolve(canvasBackground), currentStrokeWidthPx, activePoints)
         }
         canvas.restore()
+        drawZoomIndicator(canvas)
+    }
+
+    /**
+     * Notebook-style ruled lines at a fixed document-space interval: their on-screen spacing
+     * stretches and shrinks with the zoom, which is what makes the current scale readable at a
+     * glance. Drawn under the ink, only across the visible viewport.
+     */
+    private fun drawRuleLines(canvas: Canvas) {
+        ruleLinePaint.color = if (canvasBackground == CanvasBackground.BLACK) {
+            RULE_COLOR_ON_BLACK
+        } else {
+            RULE_COLOR_ON_WHITE
+        }
+        val docLeft = toDocX(0f)
+        val docRight = toDocX(width.toFloat())
+        val docBottom = toDocY(height.toFloat())
+        var y = floor(toDocY(0f) / RULE_SPACING_PX) * RULE_SPACING_PX
+        while (y <= docBottom) {
+            canvas.drawLine(docLeft, y, docRight, y, ruleLinePaint)
+            y += RULE_SPACING_PX
+        }
+    }
+
+    /** Small "137%" chip in the canvas's top-left corner, drawn in screen space. */
+    private fun drawZoomIndicator(canvas: Canvas) {
+        val label = "${(zoom * 100).roundToInt()}%"
+        val padding = 6f * density
+        val margin = 12f * density
+        val metrics = zoomChipTextPaint.fontMetrics
+        zoomChipRect.set(
+            margin,
+            margin,
+            margin + zoomChipTextPaint.measureText(label) + 2 * padding,
+            margin + (metrics.descent - metrics.ascent) + 2 * padding
+        )
+        val cornerRadius = 8f * density
+        canvas.drawRoundRect(zoomChipRect, cornerRadius, cornerRadius, zoomChipBackgroundPaint)
+        canvas.drawText(label, zoomChipRect.left + padding, zoomChipRect.top + padding - metrics.ascent, zoomChipTextPaint)
     }
 
     private fun drawStroke(canvas: Canvas, color: Int, baseWidthPx: Float, points: List<StrokePoint>) {
@@ -413,5 +476,10 @@ class InkCanvasView @JvmOverloads constructor(
         private const val MIN_ZOOM = 0.2f
         private const val MAX_ZOOM = 8f
         private const val FIT_PADDING_PX = 48f
+
+        // ~6-7 mm between ruled lines at 100% on a ~400 dpi phone: college-ruled territory.
+        private const val RULE_SPACING_PX = 100f
+        private const val RULE_COLOR_ON_WHITE = 0x1E000000
+        private const val RULE_COLOR_ON_BLACK = 0x30FFFFFF
     }
 }

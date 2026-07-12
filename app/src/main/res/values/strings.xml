@@ -19,4 +19,8 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
     <string name="action_fit_view">Fit</string>
+    <string name="pen_width_fine">Fine</string>
+    <string name="pen_width_medium">Medium</string>
+    <string name="pen_width_bold">Bold</string>
+    <string name="pen_width_marker">Marker</string>
 </resources>

@@ -2,9 +2,11 @@
 
 A simple, local-only Android notetaking app built for handwriting with a stylus (developed
 against the Motorola Stylus 5G, 2024). Draw freeform ink with pressure-sensitive strokes on an
-infinite canvas (two-finger pan and pinch-zoom, with a Fit button to jump back to all your ink),
-switch between a white or black canvas, pick from an ink color palette that stays legible on
-either background, and export a note as a PNG or PDF sized for handwriting recognition by an LLM
+infinite canvas (two-finger pan and pinch-zoom, with a Fit button to jump back to all your ink,
+a zoom-percentage chip, and ruled guide lines whose spacing tracks the zoom), switch between a
+white or black canvas, pick ink color and pen thickness from the pen menu — the palette stays
+legible on either background — and export a note as a PNG or PDF sized for handwriting
+recognition by an LLM
 (e.g. uploading to Claude for HTR). Exports crop to the bounding box of the ink plus a margin,
 not the screen.
 
@@ -64,6 +66,10 @@ device) after building and installing the app:
 - [ ] Pan with two fingers and pinch-zoom in/out; write while zoomed in and confirm the ink lands
       where the pen touches. Tap Fit and confirm the view returns to showing all ink. Reopen the
       note and confirm it opens fitted to the ink.
+- [ ] While zooming, confirm the percentage chip updates and the ruled lines spread apart/close
+      up with the zoom, on both white and black backgrounds — and that neither appears in exports.
+- [ ] Pick each pen thickness (Fine/Medium/Bold/Marker) from the pen menu, draw with it, and
+      confirm earlier strokes keep the thickness they were drawn with (also after reopening).
 - [ ] Write beyond one screenful (pan, keep writing), export, and confirm the export contains all
       of it — the exported page is the ink's bounding box, not the screen.
 - [ ] Export a note as PNG and as PDF; open each file and confirm the ink is legible — this is the
@@ -90,6 +96,10 @@ point; a stroke just started by the first finger is discarded when the second la
 gesture was navigation, not writing. Large (palm) contacts never join navigation. With an active
 stylus, the pen keeps absolute priority — finger gestures are ignored while a pen stroke is in
 progress. The editor's Fit button zooms back out to show all ink (notes also reopen fitted).
+
+Two on-screen scale cues that never appear in exports: a zoom-percentage chip in the canvas's
+top-left corner, and notebook-style ruled lines drawn at a fixed document-space interval, so the
+gap between them stretches with the zoom — at 200% the lines sit twice as far apart on screen.
 
 Consequences of the passive path to be aware of: a deliberate small fingertip contact can also
 draw (indistinguishable from a passive pen tip); pressure-sensitive width is flat because

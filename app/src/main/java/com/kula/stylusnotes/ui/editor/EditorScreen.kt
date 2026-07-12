@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +67,7 @@ fun EditorScreen(
     var canRedo by remember { mutableStateOf(false) }
     var eraseMode by remember { mutableStateOf(false) }
     var currentColor by remember { mutableStateOf<InkColor>(InkColor.Adaptive) }
+    var currentWidthPx by remember { mutableStateOf(PEN_WIDTHS_PX[1].second) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -138,13 +141,19 @@ fun EditorScreen(
                         IconButton(onClick = { showColorPicker = true }) {
                             InkColorSwatch(color = currentColor)
                         }
-                        ColorPickerMenu(
+                        PenSettingsMenu(
                             expanded = showColorPicker,
-                            selected = currentColor,
+                            selectedColor = currentColor,
+                            selectedWidthPx = currentWidthPx,
                             onDismiss = { showColorPicker = false },
                             onColorSelected = { color ->
                                 currentColor = color
                                 canvasView.currentInkColor = color
+                                showColorPicker = false
+                            },
+                            onWidthSelected = { widthPx ->
+                                currentWidthPx = widthPx
+                                canvasView.currentStrokeWidthPx = widthPx
                                 showColorPicker = false
                             }
                         )
@@ -222,12 +231,22 @@ private fun BackgroundToggleSwatch(background: CanvasBackground) {
     )
 }
 
+/** Pen thickness options: label resource to base stroke width in document px. */
+private val PEN_WIDTHS_PX = listOf(
+    R.string.pen_width_fine to 3f,
+    R.string.pen_width_medium to 6f,
+    R.string.pen_width_bold to 10f,
+    R.string.pen_width_marker to 16f
+)
+
 @Composable
-private fun ColorPickerMenu(
+private fun PenSettingsMenu(
     expanded: Boolean,
-    selected: InkColor,
+    selectedColor: InkColor,
+    selectedWidthPx: Float,
     onDismiss: () -> Unit,
-    onColorSelected: (InkColor) -> Unit
+    onColorSelected: (InkColor) -> Unit,
+    onWidthSelected: (Float) -> Unit
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         for (color in InkPalette.all) {
@@ -241,11 +260,32 @@ private fun ColorPickerMenu(
                         InkColorSwatch(color = color, size = 18.dp)
                         Text(
                             text = "  $label",
-                            fontWeight = if (color == selected) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (color == selectedColor) FontWeight.Bold else FontWeight.Normal
                         )
                     }
                 },
                 onClick = { onColorSelected(color) }
+            )
+        }
+        HorizontalDivider()
+        for ((labelRes, widthPx) in PEN_WIDTHS_PX) {
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier
+                                    .size((widthPx + 2f).coerceAtMost(18f).dp)
+                                    .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                            )
+                        }
+                        Text(
+                            text = "  " + stringResource(labelRes),
+                            fontWeight = if (widthPx == selectedWidthPx) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                },
+                onClick = { onWidthSelected(widthPx) }
             )
         }
     }
