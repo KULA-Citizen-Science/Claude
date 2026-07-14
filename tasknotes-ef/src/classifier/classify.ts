@@ -130,9 +130,11 @@ export function computeEffort(primary: Category, signals: DerivedSignals): 1 | 2
 }
 
 /**
- * Confidence 0..1 from how cleanly the top category separates from the rest and
- * how much evidence backs it. Base 0.3 when anything scored, 0.2 for a pure
- * fallback guess, up to 1.0 for a strong unambiguous signal.
+ * Confidence 0..1. Gated by *evidence* (absolute top score) so a lone weak cue
+ * — e.g. the no-estimate `initiation` nudge on an otherwise empty task — reads
+ * as low confidence even though it is technically uncontested. Within a given
+ * evidence level, a cleaner margin over the runner-up raises confidence.
+ * 0.2 is the pure-fallback floor (nothing scored at all).
  */
 export function computeConfidence(scores: Record<Category, number>): number {
   const sorted = EF_CATEGORIES.map((c) => scores[c]).sort((a, b) => b - a);
@@ -142,8 +144,8 @@ export function computeConfidence(scores: Record<Category, number>): number {
   if (top <= 0) return 0.2;
 
   const margin = (top - runnerUp) / top; // 0 (tie) .. 1 (uncontested)
-  const evidence = Math.min(1, top / 5); // saturates at a score of 5
-  return round2(clamp(0.3 + 0.5 * margin + 0.2 * evidence, 0, 1));
+  const evidence = Math.min(1, top / 6); // saturates at a score of 6
+  return round2(clamp(0.2 + 0.8 * evidence * (0.5 + 0.5 * margin), 0, 1));
 }
 
 /** Full classification pipeline. `now` is injectable for deterministic tests. */
