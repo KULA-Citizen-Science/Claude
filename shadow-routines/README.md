@@ -45,11 +45,31 @@ tags: [work, solitude, creativity, time]
 ### Importing prose (books, notes)
 
 You can also point the importer at plain prose `.md` files that have **no** per-quote
-front-matter. Prose is broken up **one quote per paragraph** (paragraphs separated by a blank
-line); a paragraph longer than 260 characters is skipped rather than shown as a wall of text,
-Markdown headings and short ALL-CAPS page/section labels are ignored, and a `>` blockquote is
-kept whole. Curated front-matter quotes are always taken exactly as written. The 260-char limit
-is `MarkdownQuoteParser.DEFAULT_MAX_QUOTE_LENGTH`.
+front-matter. Prose is broken up **one quote per sentence**, and each quote must:
+
+- be at most **130 characters** (`MarkdownQuoteParser.DEFAULT_MAX_QUOTE_LENGTH`) — longer
+  sentences are dropped, not truncated;
+- **start at a real sentence boundary** (a capital, digit or opening quote), which discards the
+  mid-sentence fragments left behind when a book breaks a sentence across a page;
+- not be a heading or running page-label (`# ...`, or a short mostly-ALL-CAPS line like
+  `ARCS OF COHERENCE 173`) — these are removed even between paragraphs.
+
+Footnote markers (superscripts, or digits stuck to a sentence's end) are stripped, and a `>`
+blockquote is kept whole even if long. Curated front-matter quotes are always taken exactly as
+written.
+
+**Attribution:** put a single front-matter block at the very top of a prose file and its
+`author` / `source` / `tags` apply to every quote pulled from that file, so a sideloaded book
+shows its source on the reward card:
+
+```
+---
+author: Steven Pinker
+source: The Sense of Style
+tags: [writing]
+---
+<the whole book as prose…>
+```
 
 ### How a reward quote is chosen (novelty)
 
