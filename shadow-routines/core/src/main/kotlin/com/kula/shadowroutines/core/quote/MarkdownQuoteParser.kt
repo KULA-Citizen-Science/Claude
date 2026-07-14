@@ -23,27 +23,24 @@ package com.kula.shadowroutines.core.quote
  * list (`[a, b]`), a bare comma list (`a, b`) or a multi-line `- item` list.
  *
  * **2. Prose** — text with *no* per-quote front-matter (e.g. a book or notes sideloaded as
- * `.md`). Dumping a whole chapter as one "quote" is useless, so prose is broken into
- * quote-sized pieces: paragraphs are split into sentences and greedily grouped so each quote is
- * roughly one to two sentences and no longer than [maxQuoteLength]. Markdown headings
- * (`# ...`), page/section labels (short ALL-CAPS lines like `ARCS OF COHERENCE 167`) and other
- * non-prose lines are skipped. A `>` blockquote is kept whole as one quote.
+ * `.md`). Dumping a whole chapter as one "quote" is useless, so prose is broken up
+ * **one quote per paragraph** (paragraphs are separated by a blank line). A paragraph longer
+ * than [maxQuoteLength] is skipped rather than truncated, so quotes stay whole and readable.
+ * Markdown headings (`# ...`), page/section labels (short ALL-CAPS lines like
+ * `ARCS OF COHERENCE 167`) and other non-prose lines are skipped. A `>` blockquote is kept
+ * whole as one quote even if long, since it was explicitly marked.
  *
  * ## Limitations (documented rather than hidden)
  * - A prose body line that is exactly `---` is misread as a fence; wrap it or split the file.
- * - Sentence splitting is punctuation-based, not linguistic; an abbreviation like "e.g." can
- *   occasionally cut a sentence early. Acceptable for short reward quotes.
- * - A single prose sentence longer than [maxQuoteLength] is dropped (it can't be shown short).
+ * - A prose paragraph longer than [maxQuoteLength] is dropped (it can't be shown whole and
+ *   short). Split it in your source, mark the part you want with `>`, or raise the limit.
  */
 object MarkdownQuoteParser {
 
     private const val FENCE = "---"
 
-    /** Default upper bound on a prose quote's length, in characters (~one to two sentences). */
-    const val DEFAULT_MAX_QUOTE_LENGTH = 280
-
-    /** Prose quotes shorter than this are merged with the next sentence where possible. */
-    private const val MIN_QUOTE_LENGTH = 40
+    /** Default upper bound on a prose paragraph's length, in characters. */
+    const val DEFAULT_MAX_QUOTE_LENGTH = 260
 
     /** Anything shorter than this is treated as a fragment/label and dropped entirely. */
     private const val FRAGMENT_LENGTH = 15
@@ -126,7 +123,7 @@ object MarkdownQuoteParser {
         }
     }
 
-    /** Splits prose into display-sized quotes. Visible for testing. */
+    /** Splits prose into one quote per paragraph. Visible for testing. */
     internal fun extractProsePieces(rawText: String, maxQuoteLength: Int): List<String> {
         val pieces = mutableListOf<String>()
         // Paragraphs are separated by one or more blank lines.
@@ -134,20 +131,18 @@ object MarkdownQuoteParser {
             val nonBlank = paragraph.lines().map { it.trim() }.filter { it.isNotEmpty() }
             if (nonBlank.isEmpty()) continue
 
-            // A `>` blockquote is an explicit quote: keep it whole.
+            // A `>` blockquote is an explicit quote: keep it whole, even if long.
             if (nonBlank.all { it.startsWith(">") }) {
                 val quote = nonBlank.joinToString(" ") { it.removePrefix(">").trim() }
                 addStripped(pieces, quote, maxQuoteLength, allowLong = true)
                 continue
             }
-            // Skip a paragraph that is a lone heading/label line.
+            // Skip headings and short page/section labels.
             if (nonBlank.size == 1 && isHeadingLike(nonBlank[0])) continue
             if (nonBlank.first().startsWith("#")) continue
 
-            val unwrapped = nonBlank.joinToString(" ")
-            for (chunk in chunkSentences(unwrapped, maxQuoteLength)) {
-                addStripped(pieces, chunk, maxQuoteLength, allowLong = false)
-            }
+            // One whole paragraph = one quote; drop it if it's too long to show whole.
+            addStripped(pieces, nonBlank.joinToString(" "), maxQuoteLength, allowLong = false)
         }
         return pieces
     }
@@ -157,44 +152,6 @@ object MarkdownQuoteParser {
         if (cleaned.length < FRAGMENT_LENGTH) return
         if (!allowLong && cleaned.length > maxLen) return
         into += cleaned
-    }
-
-    /**
-     * Splits a paragraph into sentences and greedily groups them so each result is at least
-     * [MIN_QUOTE_LENGTH] (where possible) and at most [maxLen]. Sentences longer than [maxLen]
-     * on their own are dropped.
-     */
-    private fun chunkSentences(paragraph: String, maxLen: Int): List<String> {
-        val sentences = paragraph
-            .split(Regex("(?<=[.!?][\"')”’]?)\\s+"))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-
-        val out = mutableListOf<String>()
-        val current = StringBuilder()
-
-        fun flush() {
-            if (current.isNotEmpty()) {
-                out += current.toString().trim()
-                current.clear()
-            }
-        }
-
-        for (sentence in sentences) {
-            if (sentence.length > maxLen) {
-                flush() // can't shorten this one; drop it
-                continue
-            }
-            when {
-                current.isEmpty() -> current.append(sentence)
-                current.length + 1 + sentence.length <= maxLen -> current.append(' ').append(sentence)
-                else -> { flush(); current.append(sentence) }
-            }
-            // Keep quotes punchy: once we have enough, stop at the sentence boundary.
-            if (current.length >= MIN_QUOTE_LENGTH) flush()
-        }
-        flush()
-        return out
     }
 
     private fun isHeadingLike(line: String): Boolean {

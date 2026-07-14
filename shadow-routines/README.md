@@ -42,6 +42,15 @@ tags: [work, solitude, creativity, time]
   from a folder** on the device (overflow menu → *Import quotes from folder…*, via the Storage
   Access Framework) or **rescan the bundled corpus**.
 
+### Importing prose (books, notes)
+
+You can also point the importer at plain prose `.md` files that have **no** per-quote
+front-matter. Prose is broken up **one quote per paragraph** (paragraphs separated by a blank
+line); a paragraph longer than 260 characters is skipped rather than shown as a wall of text,
+Markdown headings and short ALL-CAPS page/section labels are ignored, and a `>` blockquote is
+kept whole. Curated front-matter quotes are always taken exactly as written. The 260-char limit
+is `MarkdownQuoteParser.DEFAULT_MAX_QUOTE_LENGTH`.
+
 ### How a reward quote is chosen (novelty)
 
 Selection lives in the pure-Kotlin `:core` module (`QuoteEngine`) and is fully unit-tested:

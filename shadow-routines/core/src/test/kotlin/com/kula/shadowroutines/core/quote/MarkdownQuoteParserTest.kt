@@ -138,17 +138,48 @@ class MarkdownQuoteParserTest {
     // --- Prose (no per-quote front-matter) ---
 
     @Test
-    fun `prose is split into multiple quote-sized pieces within the max length`() {
+    fun `each paragraph becomes one whole quote, kept intact`() {
         val prose = """
             Attention is the beginning of devotion. It costs us nothing at all.
-            And yet, so often, we withhold it from the very things we claim to love.
+
+            A different paragraph stands on its own.
         """.trimIndent()
 
-        val quotes = MarkdownQuoteParser.parse("prose.md", prose, maxQuoteLength = 120)
+        val quotes = MarkdownQuoteParser.parse("prose.md", prose, maxQuoteLength = 260)
 
-        assertTrue("expected several pieces, got ${quotes.size}", quotes.size >= 2)
-        assertTrue(quotes.all { it.text.length in 15..120 })
+        assertEquals(
+            listOf(
+                "Attention is the beginning of devotion. It costs us nothing at all.",
+                "A different paragraph stands on its own.",
+            ),
+            quotes.map { it.text },
+        )
         assertTrue(quotes.all { it.tags.isEmpty() })
+    }
+
+    @Test
+    fun `a multi-line paragraph is unwrapped into a single quote`() {
+        val prose = """
+            This paragraph is wrapped
+            across several source lines
+            but is really one thought.
+        """.trimIndent()
+
+        val quotes = MarkdownQuoteParser.parse("wrap.md", prose)
+
+        assertEquals(
+            listOf("This paragraph is wrapped across several source lines but is really one thought."),
+            quotes.map { it.text },
+        )
+    }
+
+    @Test
+    fun `a paragraph longer than the max is skipped, not truncated`() {
+        val longPara = "word ".repeat(80).trim() // ~395 chars, one paragraph
+        val prose = "$longPara\n\nBut this short paragraph stays."
+        val quotes = MarkdownQuoteParser.parse("p.md", prose, maxQuoteLength = 260)
+
+        assertEquals(listOf("But this short paragraph stays."), quotes.map { it.text })
     }
 
     @Test
