@@ -81,12 +81,12 @@ object MarkdownQuoteParser {
 
         val firstFence = fences.firstOrNull()
         if (firstFence == null) {
-            addProse(quotes, fileName, content, maxQuoteLength, null, null, emptyList())
+            addProse(quotes, fileName, content, maxQuoteLength, null, resolveSource(emptyMap(), fileName), emptyList())
             return quotes
         }
         if (firstFence > 0) {
             val lead = lines.subList(0, firstFence).joinToString("\n")
-            addProse(quotes, fileName, lead, maxQuoteLength, null, null, emptyList())
+            addProse(quotes, fileName, lead, maxQuoteLength, null, resolveSource(emptyMap(), fileName), emptyList())
         }
 
         var i = 0
@@ -105,7 +105,7 @@ object MarkdownQuoteParser {
                 addProse(
                     quotes, fileName, bodyText, maxQuoteLength,
                     author = front["author"]?.trim()?.takeIf { it.isNotBlank() },
-                    source = front["source"]?.trim()?.takeIf { it.isNotBlank() },
+                    source = resolveSource(front, fileName),
                     tags = parseTags(front["tags"]),
                 )
             }
@@ -132,11 +132,29 @@ object MarkdownQuoteParser {
             id = explicitId ?: deriveId(fileName, text),
             text = text,
             author = front["author"]?.trim()?.takeIf { it.isNotBlank() },
-            source = front["source"]?.trim()?.takeIf { it.isNotBlank() },
+            source = resolveSource(front, fileName),
             tags = parseTags(front["tags"]).map { it.lowercase() }.distinct(),
             sourceFile = fileName,
         )
     }
+
+    /**
+     * Decides what to show as a quote's source, so a quote is *always* attributed:
+     * explicit `source` → front-matter `title` → and, when there is no author either, the note's
+     * own title (its file name, minus path and extension). This makes an Obsidian vault — where
+     * every note's file name is its title — self-attributing with no editing. When an author is
+     * present but no source, the author carries the attribution and the file name is not used.
+     */
+    private fun resolveSource(front: Map<String, String>, fileName: String): String? {
+        front["source"]?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        front["title"]?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        val author = front["author"]?.trim()?.takeIf { it.isNotBlank() }
+        return if (author == null) noteTitle(fileName) else null
+    }
+
+    /** The note's title: the file name without its path or extension (Obsidian-style). */
+    private fun noteTitle(fileName: String): String? =
+        fileName.substringAfterLast('/').substringBeforeLast('.').trim().takeIf { it.isNotBlank() }
 
     // --- Prose: split into sentence-sized quotes, inheriting any file-level metadata ---
 

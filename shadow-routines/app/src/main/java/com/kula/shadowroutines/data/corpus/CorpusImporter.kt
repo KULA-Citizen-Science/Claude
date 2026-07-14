@@ -31,15 +31,26 @@ object CorpusImporter {
 
     fun readDirectory(context: Context, treeUri: Uri): List<CorpusFile> {
         val tree = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+        val out = mutableListOf<CorpusFile>()
+        collectMarkdown(context, tree, out)
+        return out
+    }
+
+    /**
+     * Walks a picked directory tree recursively, so a whole Obsidian vault (notes nested in
+     * subfolders) is imported, not just the top level.
+     */
+    private fun collectMarkdown(context: Context, dir: DocumentFile, into: MutableList<CorpusFile>) {
         val resolver = context.contentResolver
-        return tree.listFiles()
-            .filter { it.isFile && (it.name?.endsWith(".md", ignoreCase = true) == true) }
-            .mapNotNull { doc ->
-                val name = doc.name ?: return@mapNotNull null
-                val content = resolver.openInputStream(doc.uri)?.use { stream ->
-                    stream.bufferedReader().readText()
-                } ?: return@mapNotNull null
-                CorpusFile(name, content)
+        for (doc in dir.listFiles()) {
+            when {
+                doc.isDirectory -> collectMarkdown(context, doc, into)
+                doc.isFile && doc.name?.endsWith(".md", ignoreCase = true) == true -> {
+                    val name = doc.name ?: continue
+                    val content = resolver.openInputStream(doc.uri)?.use { it.bufferedReader().readText() }
+                    if (content != null) into += CorpusFile(name, content)
+                }
             }
+        }
     }
 }

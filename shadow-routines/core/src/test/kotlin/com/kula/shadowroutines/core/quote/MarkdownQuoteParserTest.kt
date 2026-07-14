@@ -87,12 +87,12 @@ class MarkdownQuoteParserTest {
     }
 
     @Test
-    fun `body-only quote with no front-matter gets a derived id and no metadata`() {
+    fun `body-only quote with no front-matter is attributed to its note title`() {
         val quotes = MarkdownQuoteParser.parse("plain.md", "Just do the next small thing.")
         val q = quotes.single()
         assertTrue(q.id.startsWith("plain-"))
         assertNull(q.author)
-        assertNull(q.source)
+        assertEquals("plain", q.source) // falls back to the note's title (file name)
         assertTrue(q.tags.isEmpty())
         assertEquals("Just do the next small thing.", q.text)
     }
@@ -255,6 +255,59 @@ class MarkdownQuoteParserTest {
         assertTrue(quotes.all { it.author == "Steven Pinker" })
         assertTrue(quotes.all { it.source == "The Sense of Style" })
         assertTrue(quotes.all { it.tags == listOf("writing") })
+    }
+
+    @Test
+    fun `an Obsidian note's file name becomes the source of its quotes`() {
+        val quotes = MarkdownQuoteParser.parse(
+            "Ideas on Focus.md",
+            "One clear sentence. Another clear sentence.",
+        )
+        assertTrue(quotes.isNotEmpty())
+        assertTrue(quotes.all { it.source == "Ideas on Focus" })
+    }
+
+    @Test
+    fun `front-matter title is preferred over the file name as source`() {
+        val quotes = MarkdownQuoteParser.parse(
+            "2026-07-14.md",
+            """
+            ---
+            title: On Attention
+            ---
+            A quotable sentence lives here. And a second one as well.
+            """.trimIndent(),
+        )
+        assertTrue(quotes.all { it.source == "On Attention" })
+    }
+
+    @Test
+    fun `an explicit source wins over the file name`() {
+        val quotes = MarkdownQuoteParser.parse(
+            "note.md",
+            """
+            ---
+            source: The Real Source
+            ---
+            A quotable sentence lives here. And another sentence too.
+            """.trimIndent(),
+        )
+        assertTrue(quotes.all { it.source == "The Real Source" })
+    }
+
+    @Test
+    fun `an author without a source does not fall back to the file name`() {
+        val quote = MarkdownQuoteParser.parse(
+            "seneca.md",
+            """
+            ---
+            author: Seneca
+            ---
+            It is not that we have a short time to live, but that we waste a lot of it.
+            """.trimIndent(),
+        ).single()
+        assertEquals("Seneca", quote.author)
+        assertNull(quote.source)
     }
 
     @Test

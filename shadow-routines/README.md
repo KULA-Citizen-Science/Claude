@@ -58,9 +58,13 @@ Footnote markers (superscripts, or digits stuck to a sentence's end) are strippe
 blockquote is kept whole even if long. Curated front-matter quotes are always taken exactly as
 written.
 
-**Attribution:** put a single front-matter block at the very top of a prose file and its
-`author` / `source` / `tags` apply to every quote pulled from that file, so a sideloaded book
-shows its source on the reward card:
+**Attribution (a quote always has a source).** The source shown on the reward card is resolved
+in order: explicit front-matter `source` → front-matter `title` → **the note's own title (its
+file name, minus path and extension)**. So an Obsidian vault, where every note's file name is
+its title, is self-attributing with no editing — a quote from `Ideas on Focus.md` shows
+"Ideas on Focus". When a quote has an `author` but no source, the author carries the attribution
+and the file name is not used. You can still add a front-matter block at the top of a file to set
+an explicit author/source/tags for everything in it:
 
 ```
 ---
@@ -70,6 +74,9 @@ tags: [writing]
 ---
 <the whole book as prose…>
 ```
+
+**Folder import is recursive:** picking a directory imports every `.md` under it, including
+notes in subfolders, so you can point it at a whole vault.
 
 ### How a reward quote is chosen (novelty)
 
