@@ -134,4 +134,81 @@ class MarkdownQuoteParserTest {
         ).single()
         assertEquals(listOf("work", "focus"), q.tags)
     }
+
+    // --- Prose (no per-quote front-matter) ---
+
+    @Test
+    fun `prose is split into multiple quote-sized pieces within the max length`() {
+        val prose = """
+            Attention is the beginning of devotion. It costs us nothing at all.
+            And yet, so often, we withhold it from the very things we claim to love.
+        """.trimIndent()
+
+        val quotes = MarkdownQuoteParser.parse("prose.md", prose, maxQuoteLength = 120)
+
+        assertTrue("expected several pieces, got ${quotes.size}", quotes.size >= 2)
+        assertTrue(quotes.all { it.text.length in 15..120 })
+        assertTrue(quotes.all { it.tags.isEmpty() })
+    }
+
+    @Test
+    fun `heading and page-label lines are skipped`() {
+        val prose = """
+            ARCS OF COHERENCE 167
+
+            This is a normal sentence that should survive parsing intact.
+        """.trimIndent()
+
+        val quotes = MarkdownQuoteParser.parse("book.md", prose)
+
+        assertTrue(quotes.none { it.text.contains("ARCS OF COHERENCE") })
+        assertTrue(quotes.any { it.text.contains("survive parsing") })
+    }
+
+    @Test
+    fun `markdown heading prefixed lines are skipped`() {
+        val quotes = MarkdownQuoteParser.parse(
+            "h.md",
+            """
+            # Chapter One
+
+            The real sentence lives down here and should be kept.
+            """.trimIndent(),
+        )
+        assertTrue(quotes.none { it.text.contains("Chapter One") })
+        assertEquals(1, quotes.size)
+    }
+
+    @Test
+    fun `a blockquote is kept whole as one quote`() {
+        val quotes = MarkdownQuoteParser.parse("bq.md", "> A short marked quote kept whole.")
+        assertEquals(listOf("A short marked quote kept whole."), quotes.map { it.text })
+    }
+
+    @Test
+    fun `a single sentence longer than the max is dropped`() {
+        val longSentence = "word ".repeat(80).trim() + "." // ~400 chars, no internal breaks
+        val prose = "$longSentence\n\nBut this short one stays."
+        val quotes = MarkdownQuoteParser.parse("x.md", prose, maxQuoteLength = 120)
+
+        assertTrue(quotes.none { it.text.length > 120 })
+        assertTrue(quotes.any { it.text.contains("short one stays") })
+    }
+
+    @Test
+    fun `curated front-matter quotes are never split, even when multi-sentence`() {
+        val md = """
+            ---
+            id: c1
+            ---
+            First sentence here. Second sentence here. Third sentence continues on.
+        """.trimIndent()
+
+        val quotes = MarkdownQuoteParser.parse("c.md", md, maxQuoteLength = 20)
+
+        assertEquals(1, quotes.size)
+        assertEquals("c1", quotes.single().id)
+        assertTrue(quotes.single().text.contains("First sentence"))
+        assertTrue(quotes.single().text.contains("Third sentence"))
+    }
 }
