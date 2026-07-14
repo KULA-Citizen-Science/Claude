@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.kula.stylusnotes"
+    namespace = "com.kula.shadowroutines"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.kula.stylusnotes"
+        applicationId = "com.kula.shadowroutines"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -58,13 +58,19 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material:material-icons-core")
     debugImplementation(libs.androidx.ui.tooling)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.documentfile)
+    implementation(libs.kotlinx.coroutines.core)
+
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

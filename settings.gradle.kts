@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StylusNotes"
+rootProject.name = "ShadowRoutines"
 include(":app")
 include(":core")
