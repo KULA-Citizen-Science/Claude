@@ -1,0 +1,23 @@
+{
+  "name": "tasknotes-ef",
+  "version": "0.1.0",
+  "description": "Executive-function companion layer for TaskNotes",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["obsidian", "tasknotes", "adhd", "executive-function"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "^1.5.7",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
