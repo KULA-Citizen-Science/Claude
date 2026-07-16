@@ -19,6 +19,14 @@ export interface UserFieldDef {
   type?: string;
 }
 
+/** A configured status, from `api.catalog.statuses()`. */
+export interface StatusDef {
+  value?: string;
+  id?: string;
+  label?: string;
+  isCompleted?: boolean;
+}
+
 /** A TaskNotes task. User fields surface as top-level frontmatter keys, hence
  *  the index signature. We only read a handful of core fields. */
 export interface TaskNotesTask {
@@ -84,9 +92,14 @@ export interface RuntimeApiV1 {
       patch: Record<string, unknown>,
       context?: MutationContext,
     ): Promise<TaskNotesTask>;
+    setStatus(path: string, status: string, context?: MutationContext): Promise<TaskNotesTask>;
+  };
+  relationships: {
+    subtasks(path: string): Promise<TaskNotesTask[]>;
   };
   catalog: {
     userFields(): UserFieldDef[];
+    statuses(): StatusDef[];
   };
   query: {
     tasks(query: unknown): Promise<QueryResult>;

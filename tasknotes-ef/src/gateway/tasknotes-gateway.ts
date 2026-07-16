@@ -137,6 +137,52 @@ export class TaskNotesGateway {
     return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
   }
 
+  /** Set a task's status through the update service, with mutation context. */
+  async setStatus(path: string, status: string, reason: string): Promise<WriteOutcome> {
+    const api = this.apiWith("tasks.write");
+    if (!api) return { ok: false, reason: "no-capability" };
+
+    const result: ApiResult<TaskNotesTask> = await api.errors.toResult(() =>
+      api.tasks.setStatus(path, status, this.context(reason)),
+    );
+    if (result.ok) return { ok: true, task: result.value };
+    return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
+  }
+
+  /** The set of status values TaskNotes treats as completed (defaults to
+   *  {"done"} when the catalog is unreadable). */
+  completedStatuses(): Set<string> {
+    const api = this.apiWith("catalog.read");
+    if (!api) return new Set(["done"]);
+    try {
+      const set = new Set<string>();
+      for (const s of api.catalog.statuses() ?? []) {
+        if (s?.isCompleted && typeof s.value === "string") set.add(s.value);
+      }
+      return set.size ? set : new Set(["done"]);
+    } catch {
+      return new Set(["done"]);
+    }
+  }
+
+  /** Title of the task's first not-completed subtask, or null. Used to suggest a
+   *  concrete first step. */
+  async firstIncompleteSubtask(path: string): Promise<string | null> {
+    const api = this.apiWith("relationships.read");
+    if (!api) return null;
+    const completed = this.completedStatuses();
+    try {
+      for (const sub of (await api.relationships.subtasks(path)) ?? []) {
+        if (!sub) continue;
+        if (typeof sub.status === "string" && completed.has(sub.status)) continue;
+        if (typeof sub.title === "string" && sub.title.trim()) return sub.title;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   /** All tasks in scope, preferring the stable query API and falling back to
    *  tasks.list(). Returns [] when nothing is readable. */
   async listTasks(): Promise<TaskNotesTask[]> {
