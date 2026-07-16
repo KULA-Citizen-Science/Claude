@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => EFPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/classifier/types.ts
 var EF_CATEGORIES = [
@@ -446,6 +446,17 @@ function buildEfPatch(classification, classifiedAt) {
 
 // src/gateway/tasknotes-gateway.ts
 var MUTATION_SOURCE = "ef-layer";
+var KEY_PROPS = ["key", "id", "propertyName", "property", "name", "frontmatterKey", "mappedKey"];
+function candidateKeys(field) {
+  if (!field || typeof field !== "object") return [];
+  const rec = field;
+  const out = [];
+  for (const p of KEY_PROPS) {
+    const v = rec[p];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  return out;
+}
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -501,17 +512,27 @@ var TaskNotesGateway = class {
     return { source: MUTATION_SOURCE, correlationId: randomId(), reason };
   }
   /** The configured user-field property keys, or null if the catalog is
-   *  unreadable (TaskNotes absent / capability missing). */
+   *  unreadable (TaskNotes absent / capability missing). Tolerant of which
+   *  property the runtime uses for the frontmatter key (key/id/property/...). */
   userFieldKeys() {
+    const raw = this.userFieldsRaw();
+    if (raw === null) return null;
+    const set = /* @__PURE__ */ new Set();
+    for (const f of raw) {
+      for (const v of candidateKeys(f)) set.add(v);
+    }
+    return set;
+  }
+  /** The raw user-field objects from the catalog, for diagnostics. Null if the
+   *  catalog is unreadable. */
+  userFieldsRaw() {
     const api = this.apiWith("catalog.read");
     if (!api) return null;
-    let defs;
     try {
-      defs = api.catalog.userFields() ?? [];
+      return api.catalog.userFields() ?? [];
     } catch {
       return null;
     }
-    return new Set(defs.map((f) => f.key).filter((k) => Boolean(k)));
   }
   /**
    * Subscribe to `task.created`, skipping events caused by our own writes.
@@ -1071,19 +1092,79 @@ function registerStartCommand(plugin, gateway) {
   );
 }
 
+// src/commands/diagnose.ts
+var import_obsidian4 = require("obsidian");
+var STYLE_ID2 = "ef-diagnose-styles";
+var STYLES2 = `
+.ef-diagnose pre { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto;
+  background: var(--background-secondary); padding: 10px; border-radius: 4px; font-size: 0.8em; }
+.ef-diagnose .ef-ok { color: var(--text-success); }
+.ef-diagnose .ef-bad { color: var(--text-error); }
+`;
+var DiagnoseModal = class extends import_obsidian4.Modal {
+  constructor(app, gateway) {
+    super(app);
+    this.gateway = gateway;
+  }
+  onOpen() {
+    injectStyles2();
+    this.titleEl.setText("EF field diagnosis");
+    const c = this.contentEl;
+    c.addClass("ef-diagnose");
+    if (!this.gateway.isAvailable()) {
+      c.createEl("p", { text: "TaskNotes runtime API is not available (not loaded, or apiVersion \u2260 1)." });
+      return;
+    }
+    const raw = this.gateway.userFieldsRaw();
+    if (raw === null) {
+      c.createEl("p", { text: "Could not read the field catalog (catalog.read capability unavailable)." });
+      return;
+    }
+    c.createEl("p", { text: `TaskNotes reports ${raw.length} user field(s).` });
+    const keys = this.gateway.userFieldKeys() ?? /* @__PURE__ */ new Set();
+    const found = EF_FIELD_KEYS.filter((k) => keys.has(k));
+    const missing = EF_FIELD_KEYS.filter((k) => !keys.has(k));
+    c.createEl("p", {
+      cls: found.length === EF_FIELD_KEYS.length ? "ef-ok" : "ef-bad",
+      text: `EF fields detected: ${found.length}/${EF_FIELD_KEYS.length}`
+    });
+    if (missing.length) c.createEl("p", { text: `Missing: ${missing.join(", ")}` });
+    c.createEl("p", { text: "Raw field data from TaskNotes (screenshot this if fields are missing):" });
+    c.createEl("pre", { text: JSON.stringify(raw, null, 2) });
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function injectStyles2() {
+  if (document.getElementById(STYLE_ID2)) return;
+  const el = document.createElement("style");
+  el.id = STYLE_ID2;
+  el.textContent = STYLES2;
+  document.head.appendChild(el);
+}
+function registerDiagnoseCommand(plugin, gateway) {
+  plugin.addCommand({
+    id: "diagnose-ef-fields",
+    name: "EF: Diagnose EF fields",
+    callback: () => new DiagnoseModal(plugin.app, gateway).open()
+  });
+}
+
 // src/main.ts
-var EFPlugin = class extends import_obsidian4.Plugin {
+var EFPlugin = class extends import_obsidian5.Plugin {
   async onload() {
     this.gateway = new TaskNotesGateway(this.app);
     registerReclassifyCommands(this, this.gateway);
     registerInstallViewCommand(this);
     registerStartCommand(this, this.gateway);
+    registerDiagnoseCommand(this, this.gateway);
     this.app.workspace.onLayoutReady(() => void this.activate());
   }
   async activate() {
     const ready = await this.gateway.whenReady();
     if (!ready) {
-      new import_obsidian4.Notice(
+      new import_obsidian5.Notice(
         "TaskNotes EF Layer: TaskNotes not found or not ready. The EF layer is inactive.",
         8e3
       );
@@ -1100,7 +1181,7 @@ var EFPlugin = class extends import_obsidian4.Plugin {
     const missing = findMissingFields(keys);
     if (missing.length === 0) return true;
     const list = missing.map((f) => `\u2022 ${f.displayName} \u2014 key "${f.key}", type ${f.type}`).join("\n");
-    new import_obsidian4.Notice(
+    new import_obsidian5.Notice(
       `TaskNotes EF Layer: ${missing.length} of ${EF_FIELDS.length} EF fields are missing.
 Add them in Settings \u2192 Task Properties \u2192 "Add new user field":
 ${list}

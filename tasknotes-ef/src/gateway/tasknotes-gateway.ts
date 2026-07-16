@@ -15,11 +15,25 @@ import type {
   MutationContext,
   TaskNotesPlugin,
   TaskNotesTask,
-  UserFieldDef,
 } from "./runtime-api";
 
 /** The source tag stamped on our writes and used to ignore our own events. */
 export const MUTATION_SOURCE = "ef-layer";
+
+// The runtime may expose a user field's frontmatter key under any of these
+// property names; collect them all so verification isn't brittle to the shape.
+const KEY_PROPS = ["key", "id", "propertyName", "property", "name", "frontmatterKey", "mappedKey"];
+
+function candidateKeys(field: unknown): string[] {
+  if (!field || typeof field !== "object") return [];
+  const rec = field as Record<string, unknown>;
+  const out: string[] = [];
+  for (const p of KEY_PROPS) {
+    const v = rec[p];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  return out;
+}
 
 interface PluginsRegistry {
   getPlugin(id: string): TaskNotesPlugin | null;
@@ -92,17 +106,28 @@ export class TaskNotesGateway {
   }
 
   /** The configured user-field property keys, or null if the catalog is
-   *  unreadable (TaskNotes absent / capability missing). */
+   *  unreadable (TaskNotes absent / capability missing). Tolerant of which
+   *  property the runtime uses for the frontmatter key (key/id/property/...). */
   userFieldKeys(): Set<string> | null {
+    const raw = this.userFieldsRaw();
+    if (raw === null) return null;
+    const set = new Set<string>();
+    for (const f of raw) {
+      for (const v of candidateKeys(f)) set.add(v);
+    }
+    return set;
+  }
+
+  /** The raw user-field objects from the catalog, for diagnostics. Null if the
+   *  catalog is unreadable. */
+  userFieldsRaw(): unknown[] | null {
     const api = this.apiWith("catalog.read");
     if (!api) return null;
-    let defs: UserFieldDef[];
     try {
-      defs = api.catalog.userFields() ?? [];
+      return (api.catalog.userFields() as unknown[]) ?? [];
     } catch {
       return null;
     }
-    return new Set(defs.map((f) => f.key).filter((k): k is string => Boolean(k)));
   }
 
   /**

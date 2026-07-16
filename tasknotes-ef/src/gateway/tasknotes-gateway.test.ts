@@ -10,6 +10,7 @@ function makeHarness(opts: {
   capabilities?: string[];
   updateImpl?: (path: string, patch: Record<string, unknown>, ctx?: MutationContext) => unknown;
   present?: boolean;
+  userFields?: unknown[];
 }) {
   const capabilities = new Set(opts.capabilities ?? []);
   let createdHandler: ((e: RuntimeEvent) => void) | undefined;
@@ -32,7 +33,10 @@ function makeHarness(opts: {
         opts.updateImpl ? opts.updateImpl(path, patch, ctx) : { path, ...patch },
       ),
     },
-    catalog: { userFields: () => [{ key: "ef_primary" }, { key: "ef_load" }] },
+    catalog: {
+      userFields: () => opts.userFields ?? [{ key: "ef_primary" }, { key: "ef_load" }],
+      statuses: () => [{ value: "done", isCompleted: true }],
+    },
     query: { tasks: vi.fn().mockResolvedValue({ tasks: [], matched: 0, total: 0, returned: 0 }) },
     errors: {
       toResult: async <T>(fn: () => Promise<T> | T) => {
@@ -128,6 +132,23 @@ describe("userFieldKeys", () => {
   it("is null without the catalog.read capability", () => {
     const { app } = makeHarness({ capabilities: [] });
     expect(new TaskNotesGateway(app).userFieldKeys()).toBeNull();
+  });
+
+  it("detects keys regardless of which property the runtime uses (key/id/property)", () => {
+    const { app } = makeHarness({
+      capabilities: ["catalog.read"],
+      userFields: [
+        { key: "ef_primary" }, // key
+        { id: "ef_load" }, // id only
+        { property: "ef_social" }, // property only
+        { displayName: "EF Effort", propertyName: "ef_effort" }, // propertyName
+      ],
+    });
+    const keys = new TaskNotesGateway(app).userFieldKeys();
+    expect(keys).not.toBeNull();
+    for (const k of ["ef_primary", "ef_load", "ef_social", "ef_effort"]) {
+      expect(keys?.has(k)).toBe(true);
+    }
   });
 });
 
