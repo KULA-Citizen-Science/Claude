@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# main.js (the esbuild bundle) is committed so the plugin can be installed by
+# copying manifest.json + main.js into a vault without a local build.
