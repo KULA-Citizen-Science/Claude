@@ -10,6 +10,7 @@ import { TaskNotesGateway } from "./gateway/tasknotes-gateway";
 import { toTaskDTO } from "./gateway/task-dto";
 import { registerReclassifyCommands } from "./commands/reclassify";
 import { registerInstallViewCommand } from "./commands/install-view";
+import { registerStartCommand } from "./picker/start-modal";
 
 export default class EFPlugin extends Plugin {
   private gateway!: TaskNotesGateway;
@@ -20,6 +21,7 @@ export default class EFPlugin extends Plugin {
     // Commands are always available; they re-check readiness when invoked.
     registerReclassifyCommands(this, this.gateway);
     registerInstallViewCommand(this);
+    registerStartCommand(this, this.gateway);
 
     // Defer live wiring until the workspace (and thus other plugins) are ready.
     this.app.workspace.onLayoutReady(() => void this.activate());

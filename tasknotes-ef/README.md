@@ -32,6 +32,11 @@ passive (it won't write) until they exist.
 
 ## What it does
 
+- **EF: Start something** (command + ribbon ▶) — the point of the whole plugin.
+  Shows **one** easiest-to-start task (open, not blocked, not parked for later),
+  why it was picked, and a concrete **first move**, with `5m / 25m / more` size
+  filters and a *Show another* re-roll. `Start` marks it in-progress and opens it.
+  "Ease me in" ordering: lowest effort first, urgency only as a tiebreak.
 - **On task creation** — classifies the task and writes its EF profile.
 - **EF: reclassify vault (dry run)** — previews what it *would* write (console +
   notice); writes nothing.

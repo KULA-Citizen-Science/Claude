@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => EFPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/classifier/types.ts
 var EF_CATEGORIES = [
@@ -57,9 +57,9 @@ function bucketTimePressure(due, now) {
   if (!due) return "none";
   const parsed = Date.parse(due);
   if (Number.isNaN(parsed)) return "none";
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const today = startOfDay(now);
-  const dueDay = startOfDay(new Date(parsed));
+  const startOfDay2 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = startOfDay2(now);
+  const dueDay = startOfDay2(new Date(parsed));
   if (dueDay < today) return "overdue";
   if (dueDay <= today + 2 * DAY_MS) return "soon";
   return "none";
@@ -538,6 +538,48 @@ var TaskNotesGateway = class {
     if (result.ok) return { ok: true, task: result.value };
     return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
   }
+  /** Set a task's status through the update service, with mutation context. */
+  async setStatus(path, status, reason) {
+    const api = this.apiWith("tasks.write");
+    if (!api) return { ok: false, reason: "no-capability" };
+    const result = await api.errors.toResult(
+      () => api.tasks.setStatus(path, status, this.context(reason))
+    );
+    if (result.ok) return { ok: true, task: result.value };
+    return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
+  }
+  /** The set of status values TaskNotes treats as completed (defaults to
+   *  {"done"} when the catalog is unreadable). */
+  completedStatuses() {
+    const api = this.apiWith("catalog.read");
+    if (!api) return /* @__PURE__ */ new Set(["done"]);
+    try {
+      const set = /* @__PURE__ */ new Set();
+      for (const s of api.catalog.statuses() ?? []) {
+        if (s?.isCompleted && typeof s.value === "string") set.add(s.value);
+      }
+      return set.size ? set : /* @__PURE__ */ new Set(["done"]);
+    } catch {
+      return /* @__PURE__ */ new Set(["done"]);
+    }
+  }
+  /** Title of the task's first not-completed subtask, or null. Used to suggest a
+   *  concrete first step. */
+  async firstIncompleteSubtask(path) {
+    const api = this.apiWith("relationships.read");
+    if (!api) return null;
+    const completed = this.completedStatuses();
+    try {
+      for (const sub of await api.relationships.subtasks(path) ?? []) {
+        if (!sub) continue;
+        if (typeof sub.status === "string" && completed.has(sub.status)) continue;
+        if (typeof sub.title === "string" && sub.title.trim()) return sub.title;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
   /** All tasks in scope, preferring the stable query API and falling back to
    *  tasks.list(). Returns [] when nothing is readable. */
   async listTasks() {
@@ -735,18 +777,313 @@ function registerInstallViewCommand(plugin) {
   });
 }
 
+// src/picker/start-modal.ts
+var import_obsidian3 = require("obsidian");
+
+// src/picker/select.ts
+var DURATION_RANK = { quick: 0, medium: 1, none: 2, long: 3 };
+var URGENCY_RANK = { overdue: 0, soon: 1, none: 2 };
+var DURATION_LABEL = {
+  quick: "quick",
+  medium: "medium",
+  long: "long",
+  none: "unsized"
+};
+function toDTO(pt) {
+  return {
+    title: pt.title ?? "",
+    tags: pt.tags ?? [],
+    contexts: pt.contexts ?? [],
+    timeEstimate: pt.timeEstimate ?? null,
+    due: pt.due ?? null,
+    recurrence: pt.recurrence ?? null
+  };
+}
+function isEffort(v) {
+  return v === 1 || v === 2 || v === 3 || v === 4;
+}
+function isCategory(v) {
+  return typeof v === "string" && EF_CATEGORIES.includes(v);
+}
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function isDeferred(scheduled, now) {
+  if (!scheduled) return false;
+  const t = Date.parse(scheduled);
+  if (Number.isNaN(t)) return false;
+  return startOfDay(new Date(t)) > startOfDay(now);
+}
+function resolveEf(pt) {
+  const c = classify(toDTO(pt));
+  return {
+    effort: isEffort(pt.ef_effort) ? pt.ef_effort : c.ef_effort,
+    primary: isCategory(pt.ef_primary) ? pt.ef_primary : c.ef_primary
+  };
+}
+function passesTimeCap(cap, timeEstimate, effort) {
+  if (cap === "more") return true;
+  const est = typeof timeEstimate === "number" && timeEstimate > 0 ? timeEstimate : null;
+  if (cap === "5m") return est !== null ? est <= 15 : effort === 1;
+  return est !== null ? est <= 30 : effort <= 2;
+}
+function rankCandidates(tasks, options = {}) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const cap = options.timeCap ?? "more";
+  const completed = options.completedStatuses ?? /* @__PURE__ */ new Set(["done"]);
+  const exclude = options.exclude ?? /* @__PURE__ */ new Set();
+  const scored = [];
+  for (const pt of tasks) {
+    if (exclude.has(pt.path)) continue;
+    if (pt.archived) continue;
+    if (pt.status && completed.has(pt.status)) continue;
+    if (Array.isArray(pt.blockedBy) && pt.blockedBy.length > 0) continue;
+    if (isDeferred(pt.scheduled, now)) continue;
+    const { effort, primary } = resolveEf(pt);
+    if (!passesTimeCap(cap, pt.timeEstimate, effort)) continue;
+    const duration = bucketDuration(pt.timeEstimate);
+    const urgency = bucketTimePressure(pt.due, now);
+    scored.push({
+      c: {
+        path: pt.path,
+        title: pt.title ?? "",
+        effort,
+        primary,
+        durationLabel: DURATION_LABEL[duration],
+        urgency
+      },
+      keys: [effort, DURATION_RANK[duration], URGENCY_RANK[urgency], (pt.title ?? "").toLowerCase()]
+    });
+  }
+  scored.sort((a, b) => {
+    for (let i = 0; i < 3; i++) {
+      const d = a.keys[i] - b.keys[i];
+      if (d !== 0) return d;
+    }
+    return a.keys[3].localeCompare(b.keys[3]);
+  });
+  return scored.map((s) => s.c);
+}
+var FIRST_STEP = {
+  initiation: "Do the smallest physical first action \u2014 open the thing. Nothing more.",
+  planning: "Write just 3 bullet sub-steps. Don't do them yet \u2014 only list them.",
+  organization: "Open the one file, link, or email you'll need first.",
+  focus: "Open the doc and read only the first line. Put your cursor in.",
+  decision: "Name the two options out loud. You don't have to decide yet.",
+  emotional: "Set a 5-minute timer. You have permission to stop when it rings.",
+  routine: "It's a quick one \u2014 just do it now."
+};
+function firstStep(primary, subtaskTitle) {
+  if (subtaskTitle && subtaskTitle.trim()) return `Start with: \u201C${subtaskTitle.trim()}\u201D`;
+  return FIRST_STEP[primary];
+}
+
+// src/picker/map.ts
+var ARCHIVE_TAG = "archived";
+function strArray(v) {
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+}
+function toPickerTask(t) {
+  const tags = strArray(t.tags);
+  return {
+    path: t.path,
+    title: typeof t.title === "string" ? t.title : "",
+    status: typeof t.status === "string" ? t.status : void 0,
+    // TaskNotes marks archived tasks with the archive tag (and may also expose a
+    // boolean) — treat either as archived.
+    archived: t.archived === true || tags.includes(ARCHIVE_TAG),
+    due: typeof t.due === "string" ? t.due : null,
+    scheduled: typeof t.scheduled === "string" ? t.scheduled : null,
+    blockedBy: Array.isArray(t.blockedBy) ? t.blockedBy : null,
+    timeEstimate: typeof t.timeEstimate === "number" ? t.timeEstimate : null,
+    tags,
+    contexts: strArray(t.contexts),
+    recurrence: typeof t.recurrence === "string" ? t.recurrence : null,
+    ef_effort: t.ef_effort,
+    ef_primary: t.ef_primary
+  };
+}
+
+// src/picker/start-modal.ts
+var IN_PROGRESS_STATUS = "in-progress";
+var EFFORT_LABEL = { 1: "very easy", 2: "easy", 3: "moderate", 4: "heavy" };
+var SIZE_LABEL = {
+  quick: "quick",
+  medium: "medium",
+  long: "long",
+  unsized: null
+};
+var URGENCY_LABEL = {
+  overdue: "\u26A0 overdue",
+  soon: "due soon",
+  none: null
+};
+var STYLE_ID = "ef-start-styles";
+var STYLES = `
+.ef-start-modal .ef-filters { display:flex; gap:6px; margin-bottom:14px; }
+.ef-start-modal .ef-filter { font-size:0.8em; padding:3px 10px; border-radius:12px; cursor:pointer;
+  background: var(--background-modifier-border); border:none; color: var(--text-normal); }
+.ef-start-modal .ef-filter.is-active { background: var(--interactive-accent); color: var(--text-on-accent); }
+.ef-start-modal .ef-pick-title { font-size:1.3em; font-weight:600; cursor:pointer; }
+.ef-start-modal .ef-pick-title:hover { text-decoration:underline; }
+.ef-start-modal .ef-chips { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 0; }
+.ef-start-modal .ef-chip { font-size:0.78em; padding:2px 8px; border-radius:10px;
+  background: var(--background-modifier-border); }
+.ef-start-modal .ef-firststep { margin:14px 0; padding:10px 12px; border-left:3px solid var(--interactive-accent);
+  background: var(--background-secondary); border-radius:4px; }
+.ef-start-modal .ef-firststep-label { font-size:0.72em; text-transform:uppercase; opacity:0.7; letter-spacing:0.05em; }
+.ef-start-modal .ef-firststep-text { margin-top:3px; }
+.ef-start-modal .ef-actions { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+.ef-start-modal .ef-msg { opacity:0.75; padding:8px 0; }
+`;
+var TIME_CAPS = [
+  { cap: "5m", label: "5 min" },
+  { cap: "25m", label: "25 min" },
+  { cap: "more", label: "more" }
+];
+var StartSomethingModal = class extends import_obsidian3.Modal {
+  constructor(app, gateway) {
+    super(app);
+    this.timeCap = "more";
+    this.exclude = /* @__PURE__ */ new Set();
+    this.ranked = [];
+    this.completed = /* @__PURE__ */ new Set(["done"]);
+    this.gateway = gateway;
+  }
+  async onOpen() {
+    injectStyles();
+    this.titleEl.setText("Start something");
+    this.modalEl.addClass("ef-start-modal");
+    if (!this.gateway.isAvailable()) {
+      this.renderMessage("TaskNotes isn't ready \u2014 can't pick a task right now.");
+      return;
+    }
+    await this.reload();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+  /** Refetch tasks and re-rank (used on open and when the size filter changes). */
+  async reload() {
+    this.renderMessage("Finding the easiest thing to start\u2026");
+    this.completed = this.gateway.completedStatuses();
+    const tasks = (await this.gateway.listTasks()).map(toPickerTask);
+    this.ranked = rankCandidates(tasks, {
+      timeCap: this.timeCap,
+      completedStatuses: this.completed,
+      exclude: this.exclude
+    });
+    this.render();
+  }
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.renderFilters(contentEl);
+    const pick = this.ranked[0];
+    if (!pick) {
+      this.renderEmpty(contentEl);
+      return;
+    }
+    this.renderPick(contentEl, pick);
+  }
+  renderFilters(parent) {
+    const row = parent.createDiv({ cls: "ef-filters" });
+    for (const { cap, label } of TIME_CAPS) {
+      const btn = row.createEl("button", { text: label, cls: "ef-filter" });
+      if (cap === this.timeCap) btn.addClass("is-active");
+      btn.addEventListener("click", () => {
+        if (this.timeCap !== cap) {
+          this.timeCap = cap;
+          void this.reload();
+        }
+      });
+    }
+  }
+  renderPick(parent, pick) {
+    const title = parent.createDiv({ cls: "ef-pick-title", text: pick.title || "(untitled task)" });
+    title.addEventListener("click", () => this.openTask(pick.path));
+    const chips = parent.createDiv({ cls: "ef-chips" });
+    const labels = [
+      EFFORT_LABEL[pick.effort],
+      SIZE_LABEL[pick.durationLabel],
+      URGENCY_LABEL[pick.urgency],
+      pick.primary
+    ].filter((x) => Boolean(x));
+    for (const l of labels) chips.createSpan({ cls: "ef-chip", text: l });
+    const step = parent.createDiv({ cls: "ef-firststep" });
+    step.createDiv({ cls: "ef-firststep-label", text: "First move" });
+    const stepText = step.createDiv({ cls: "ef-firststep-text", text: firstStep(pick.primary) });
+    void this.gateway.firstIncompleteSubtask(pick.path).then((sub) => {
+      if (sub && this.ranked[0]?.path === pick.path) stepText.setText(firstStep(pick.primary, sub));
+    });
+    const actions = parent.createDiv({ cls: "ef-actions" });
+    this.button(actions, "play", "Start", "cta", () => this.startTask(pick.path));
+    this.button(actions, "file", "Open", "", () => this.openTask(pick.path));
+    this.button(actions, "dice", "Show another", "", () => this.showAnother(pick.path));
+  }
+  renderEmpty(parent) {
+    const msg = this.timeCap === "more" ? "Nothing to start right now \u2014 everything's done, blocked, or parked for later. \u{1F389}" : "Nothing that small right now. Try a longer window.";
+    parent.createDiv({ cls: "ef-msg", text: msg });
+  }
+  renderMessage(text) {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createDiv({ cls: "ef-msg", text });
+  }
+  button(parent, icon, label, cls, onClick) {
+    const btn = parent.createEl("button", { cls });
+    (0, import_obsidian3.setIcon)(btn.createSpan(), icon);
+    btn.createSpan({ text: ` ${label}` });
+    btn.addEventListener("click", onClick);
+  }
+  showAnother(currentPath) {
+    this.exclude.add(currentPath);
+    this.ranked = this.ranked.filter((c) => !this.exclude.has(c.path));
+    this.render();
+  }
+  openTask(path) {
+    void this.app.workspace.openLinkText(path, "", false);
+    this.close();
+  }
+  async startTask(path) {
+    const outcome = await this.gateway.setStatus(path, IN_PROGRESS_STATUS, "started from picker");
+    if (!outcome.ok) new import_obsidian3.Notice("Couldn't mark it in-progress \u2014 opening it anyway.");
+    this.openTask(path);
+  }
+};
+function injectStyles() {
+  if (document.getElementById(STYLE_ID)) return;
+  const el = document.createElement("style");
+  el.id = STYLE_ID;
+  el.textContent = STYLES;
+  document.head.appendChild(el);
+}
+function registerStartCommand(plugin, gateway) {
+  plugin.addCommand({
+    id: "start-something",
+    name: "EF: Start something",
+    callback: () => new StartSomethingModal(plugin.app, gateway).open()
+  });
+  plugin.addRibbonIcon(
+    "play",
+    "EF: Start something",
+    () => new StartSomethingModal(plugin.app, gateway).open()
+  );
+}
+
 // src/main.ts
-var EFPlugin = class extends import_obsidian3.Plugin {
+var EFPlugin = class extends import_obsidian4.Plugin {
   async onload() {
     this.gateway = new TaskNotesGateway(this.app);
     registerReclassifyCommands(this, this.gateway);
     registerInstallViewCommand(this);
+    registerStartCommand(this, this.gateway);
     this.app.workspace.onLayoutReady(() => void this.activate());
   }
   async activate() {
     const ready = await this.gateway.whenReady();
     if (!ready) {
-      new import_obsidian3.Notice(
+      new import_obsidian4.Notice(
         "TaskNotes EF Layer: TaskNotes not found or not ready. The EF layer is inactive.",
         8e3
       );
@@ -763,7 +1100,7 @@ var EFPlugin = class extends import_obsidian3.Plugin {
     const missing = findMissingFields(keys);
     if (missing.length === 0) return true;
     const list = missing.map((f) => `\u2022 ${f.displayName} \u2014 key "${f.key}", type ${f.type}`).join("\n");
-    new import_obsidian3.Notice(
+    new import_obsidian4.Notice(
       `TaskNotes EF Layer: ${missing.length} of ${EF_FIELDS.length} EF fields are missing.
 Add them in Settings \u2192 Task Properties \u2192 "Add new user field":
 ${list}
