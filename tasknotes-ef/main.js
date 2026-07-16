@@ -80,43 +80,251 @@ var TITLE_CUES = [
   {
     category: "planning",
     weight: 2,
-    terms: ["plan", "outline", "roadmap", "strategy", "break down", "breakdown", "figure out", "scope", "sketch out", "design a"]
+    terms: [
+      // en
+      "plan",
+      "outline",
+      "roadmap",
+      "strategy",
+      "break down",
+      "breakdown",
+      "figure out",
+      "scope",
+      "sketch out",
+      "design a",
+      // de
+      "planen",
+      "\xFCberleg",
+      "ueberleg",
+      "konzept",
+      "entwurf",
+      "strukturier",
+      "vorbereiten",
+      "ausarbeiten",
+      "erarbeiten"
+    ]
   },
   {
     category: "decision",
     weight: 2,
-    terms: ["decide", "choose", "pick ", "select", "evaluate", "compare", "which ", "whether", "option", "vs "]
+    terms: [
+      // en
+      "decide",
+      "choose",
+      "pick ",
+      "select",
+      "evaluate",
+      "compare",
+      "which ",
+      "whether",
+      "option",
+      "vs ",
+      // de
+      "entscheiden",
+      "ausw\xE4hlen",
+      "auswaehlen",
+      "w\xE4hlen",
+      "waehlen",
+      "vergleichen",
+      " ob "
+    ]
   },
   {
     category: "organization",
     weight: 2,
-    terms: ["organize", "organise", "sort", "file ", "tidy", "clean up", "gather", "collect", "look up", "research", "compile", "catalog", "find "]
+    terms: [
+      // en
+      "organize",
+      "organise",
+      "sort",
+      "file ",
+      "tidy",
+      "clean up",
+      "gather",
+      "collect",
+      "look up",
+      "research",
+      "compile",
+      "catalog",
+      "find ",
+      // de
+      "organisier",
+      "sortier",
+      "einsammeln",
+      "sammeln",
+      "suchen",
+      "nachsehen",
+      "nachschauen",
+      "nachschlagen",
+      "pr\xFCfen",
+      "pruefen",
+      "liste",
+      "raussuchen",
+      "mitnehmen",
+      "einpacken",
+      "packen"
+    ]
   },
   {
     category: "focus",
     weight: 2,
-    terms: ["write", "draft", "read ", "review", "study", "analyze", "analyse", "implement", "edit ", "report", "chapter", "essay"]
+    terms: [
+      // en
+      "write",
+      "draft",
+      "read ",
+      "review",
+      "study",
+      "analyze",
+      "analyse",
+      "implement",
+      "edit ",
+      "report",
+      "chapter",
+      "essay",
+      // de
+      "schreiben",
+      "lesen",
+      "bericht",
+      "nachbereiten",
+      "posten",
+      "blogpost",
+      "notizen"
+    ]
   },
   {
     category: "initiation",
     weight: 2,
-    terms: ["start", "begin", "set up", "kick off", "kickoff", "initiate", "get going", "create a"]
+    terms: [
+      // en
+      "start",
+      "begin",
+      "set up",
+      "kick off",
+      "kickoff",
+      "initiate",
+      "get going",
+      "create a",
+      "reserve",
+      "booking",
+      // de
+      "anfangen",
+      "beginnen",
+      "starten",
+      "loslegen",
+      "einrichten",
+      "erstellen",
+      "besorgen",
+      "buchen"
+    ]
   },
   {
     category: "emotional",
     weight: 3,
-    terms: ["taxes", "dentist", "doctor", "apolog", "confront", "difficult conversation", "cancel", "complaint", "insurance", "argument", "chase up", "overdue bill"]
+    terms: [
+      // en
+      "taxes",
+      "dentist",
+      "doctor",
+      "apolog",
+      "confront",
+      "difficult conversation",
+      "cancel",
+      "complaint",
+      "insurance",
+      "argument",
+      "chase up",
+      "overdue bill",
+      "reimburse",
+      "invoice",
+      "refund",
+      // de
+      "steuer",
+      "arzt",
+      "rechnung",
+      "abrechnung",
+      "versicherung",
+      "k\xFCndigen",
+      "kuendigen",
+      "mahnung",
+      "ausgleichen",
+      "erstattung"
+    ]
   },
   {
     category: "routine",
     weight: 2,
-    terms: ["water the", "take out", "laundry", "dishes", "standup", "check email", "backup", "chores", "refill", "restock"]
+    terms: [
+      // en
+      "water the",
+      "take out",
+      "laundry",
+      "dishes",
+      "standup",
+      "check email",
+      "backup",
+      "chores",
+      "refill",
+      "restock",
+      // de
+      "einkaufen",
+      "putzen",
+      "w\xE4sche",
+      "waesche",
+      "m\xFCll",
+      "muell",
+      "nachf\xFCllen",
+      "nachfuellen",
+      "gie\xDFen",
+      "giessen"
+    ]
   }
 ];
-var SOCIAL_LIVE_TERMS = ["call", "meet", "meeting", "interview", "standup", "sync", "1:1", "one-on-one", "zoom", "present to", "catch up with"];
-var SOCIAL_ASYNC_TERMS = ["email", "reply", "message", "text ", "dm ", "slack", "respond", "write to", "send "];
-var SOCIAL_LIVE_CONTEXTS = ["phone", "call", "meeting", "zoom", "office"];
-var SOCIAL_ASYNC_CONTEXTS = ["email", "slack", "online"];
+var SOCIAL_LIVE_TERMS = [
+  // en
+  "call",
+  "meet",
+  "meeting",
+  "interview",
+  "standup",
+  "sync",
+  "1:1",
+  "one-on-one",
+  "zoom",
+  "present to",
+  "catch up with",
+  // de
+  "anrufen",
+  "anruf",
+  "telefon",
+  "treffen",
+  "zusammensetzen",
+  "besprechen",
+  "gespr\xE4ch",
+  "gespraech"
+];
+var SOCIAL_ASYNC_TERMS = [
+  // en
+  "email",
+  "reply",
+  "message",
+  "text ",
+  "dm ",
+  "slack",
+  "respond",
+  "write to",
+  "send ",
+  // de
+  "e-mail",
+  "mailen",
+  "senden",
+  "schicken",
+  "antworten",
+  "nachricht",
+  "posten"
+];
+var SOCIAL_LIVE_CONTEXTS = ["phone", "call", "meeting", "zoom", "office", "telefon"];
+var SOCIAL_ASYNC_CONTEXTS = ["email", "slack", "online", "mail"];
 
 // src/classifier/classify.ts
 function zeroScores() {

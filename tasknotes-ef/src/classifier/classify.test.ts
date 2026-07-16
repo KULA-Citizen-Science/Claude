@@ -172,3 +172,25 @@ describe("classify — full profile shape on a rich task", () => {
     expect(Array.isArray(result.ef_secondary)).toBe(true);
   });
 });
+
+describe("classify — German cues (real-vault examples)", () => {
+  const cases: Array<[string, Partial<TaskDTO>, Category]> = [
+    ["buchen → initiation", { title: "Zuege buchen fuer Deutschland" }, "initiation"],
+    ["Rechnung → emotional", { title: "Rechnungen an Hacker senden" }, "emotional"],
+    ["einsammeln → organization", { title: "PDFs von Chloe und Lambert einsammeln" }, "organization"],
+    ["nachsehen → organization", { title: "Nachsehen wann die naechsten Lehrtermine sind" }, "organization"],
+    ["vorbereiten → planning", { title: "Wiki Introduction no. 3 VORBEREITEN", timeEstimate: 90 }, "planning"],
+    ["nachbereiten → focus", { title: "Wiki-Introduction NACHBEREITEN", timeEstimate: 90 }, "focus"],
+    ["Steuer → emotional", { title: "Steuererklaerung endlich machen" }, "emotional"],
+  ];
+  it.each(cases)("%s", (_name, partial, expected) => {
+    expect(classify(task(partial), NOW).ef_primary).toBe(expected);
+  });
+
+  it("reads async social from a German send task", () => {
+    expect(classify(task({ title: "Reise-Budget an Matt senden" }), NOW).ef_social).toBe("async");
+  });
+  it("reads live social from a German meet-up task", () => {
+    expect(classify(task({ title: "Mit Ash zusammensetzen fuer Report" }), NOW).ef_social).toBe("live");
+  });
+});
