@@ -1,6 +1,6 @@
 {
   "name": "tasknotes-ef",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Executive-function companion layer for TaskNotes",
   "main": "main.js",
   "type": "module",

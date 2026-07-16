@@ -1,7 +1,7 @@
 {
   "id": "tasknotes-ef",
   "name": "TaskNotes EF Layer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.10.1",
   "description": "Executive-function classification layer for TaskNotes: lowers the decision cost of starting tasks.",
   "author": "KULA",
