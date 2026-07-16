@@ -4,6 +4,7 @@
 
 import { App, Modal, Plugin } from "obsidian";
 import { EF_FIELD_KEYS } from "../fields";
+import { resolveTaskPath } from "../picker/map";
 import type { TaskNotesGateway } from "../gateway/tasknotes-gateway";
 
 const STYLE_ID = "ef-diagnose-styles";
@@ -19,9 +20,9 @@ class DiagnoseModal extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  async onOpen(): Promise<void> {
     injectStyles();
-    this.titleEl.setText("EF field diagnosis");
+    this.titleEl.setText("EF diagnosis");
     const c = this.contentEl;
     c.addClass("ef-diagnose");
 
@@ -30,24 +31,49 @@ class DiagnoseModal extends Modal {
       return;
     }
 
+    this.renderFields(c);
+    await this.renderTaskPaths(c);
+  }
+
+  private renderFields(c: HTMLElement): void {
+    c.createEl("h4", { text: "User fields" });
     const raw = this.gateway.userFieldsRaw();
     if (raw === null) {
       c.createEl("p", { text: "Could not read the field catalog (catalog.read capability unavailable)." });
       return;
     }
 
-    c.createEl("p", { text: `TaskNotes reports ${raw.length} user field(s).` });
-
     const keys = this.gateway.userFieldKeys() ?? new Set<string>();
     const found = EF_FIELD_KEYS.filter((k) => keys.has(k));
     const missing = EF_FIELD_KEYS.filter((k) => !keys.has(k));
 
-    c.createEl("p", { cls: found.length === EF_FIELD_KEYS.length ? "ef-ok" : "ef-bad",
-      text: `EF fields detected: ${found.length}/${EF_FIELD_KEYS.length}` });
-    if (missing.length) c.createEl("p", { text: `Missing: ${missing.join(", ")}` });
+    c.createEl("p", {
+      cls: found.length === EF_FIELD_KEYS.length ? "ef-ok" : "ef-bad",
+      text: `EF fields detected: ${found.length}/${EF_FIELD_KEYS.length}` + (missing.length ? ` (missing: ${missing.join(", ")})` : ""),
+    });
+  }
 
-    c.createEl("p", { text: "Raw field data from TaskNotes (screenshot this if fields are missing):" });
-    c.createEl("pre", { text: JSON.stringify(raw, null, 2) });
+  private async renderTaskPaths(c: HTMLElement): Promise<void> {
+    c.createEl("h4", { text: "Task paths" });
+    const loading = c.createEl("p", { text: "Checking tasks…" });
+
+    const tasks = await this.gateway.listTasks();
+    loading.remove();
+
+    const missing = tasks.filter((t) => !this.gateway.fileExists(resolveTaskPath(t)));
+    c.createEl("p", {
+      cls: missing.length ? "ef-bad" : "ef-ok",
+      text: `listTasks() returned ${tasks.length}; ${missing.length} have no matching file on disk.`,
+    });
+
+    const sample = tasks.slice(0, 5).map((t) => {
+      const p = resolveTaskPath(t);
+      return `${this.gateway.fileExists(p) ? "✓" : "✗"} ${p || "(no path resolved)"}`;
+    });
+    c.createEl("p", { text: "Sample paths (✓ = file found), then the first raw task object:" });
+    c.createEl("pre", {
+      text: sample.join("\n") + (tasks[0] ? "\n\n" + JSON.stringify(tasks[0], null, 2) : ""),
+    });
   }
 
   onClose(): void {

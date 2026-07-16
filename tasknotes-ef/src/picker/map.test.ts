@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { toPickerTask } from "./map";
+import { toPickerTask, resolveTaskPath } from "./map";
 import type { TaskNotesTask } from "../gateway/runtime-api";
+
+describe("resolveTaskPath", () => {
+  it("reads path, or file.path / filePath fallbacks, or empty", () => {
+    expect(resolveTaskPath({ path: "Tasks/a.md" } as TaskNotesTask)).toBe("Tasks/a.md");
+    expect(resolveTaskPath({ file: { path: "Tasks/b.md" } } as unknown as TaskNotesTask)).toBe("Tasks/b.md");
+    expect(resolveTaskPath({ filePath: "Tasks/c.md" } as unknown as TaskNotesTask)).toBe("Tasks/c.md");
+    expect(resolveTaskPath({} as TaskNotesTask)).toBe("");
+  });
+});
 
 describe("toPickerTask", () => {
   it("carries the fields the picker needs, including stored EF overrides", () => {

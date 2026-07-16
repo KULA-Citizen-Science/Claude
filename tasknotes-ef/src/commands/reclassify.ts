@@ -5,6 +5,7 @@ import { Notice, type Plugin } from "obsidian";
 import { classify, type EFClassification } from "../classifier";
 import { buildEfPatch, findMissingFields } from "../fields";
 import { toTaskDTO, isClassified } from "../gateway/task-dto";
+import { resolveTaskPath } from "../picker/map";
 import type { TaskNotesGateway } from "../gateway/tasknotes-gateway";
 import type { TaskNotesTask } from "../gateway/runtime-api";
 
@@ -29,12 +30,14 @@ export function planReclassify(tasks: TaskNotesTask[], classifiedAt: string): Re
   const writes: PlannedWrite[] = [];
 
   for (const task of tasks) {
+    const path = resolveTaskPath(task);
+    if (!path) continue; // no resolvable path — nothing we can safely write to
     if (isClassified(task)) {
-      alreadyClassified.push(task.path);
+      alreadyClassified.push(path);
       continue;
     }
     const classification = classify(toTaskDTO(task));
-    writes.push({ path: task.path, classification, patch: buildEfPatch(classification, classifiedAt) });
+    writes.push({ path, classification, patch: buildEfPatch(classification, classifiedAt) });
   }
 
   return { scanned: tasks.length, alreadyClassified, writes };
@@ -86,7 +89,14 @@ export async function runReclassify(
 
   let written = 0;
   let failed = 0;
+  let skippedMissing = 0;
   for (const w of plan.writes) {
+    // Don't fire writes at phantom / stale index entries — that's what produced
+    // the "file does not exist" spam.
+    if (!gateway.fileExists(w.path)) {
+      skippedMissing++;
+      continue;
+    }
     const outcome = await gateway.updateTask(w.path, w.patch, "reclassify vault");
     if (outcome.ok) {
       written++;
@@ -98,6 +108,7 @@ export async function runReclassify(
 
   new Notice(
     `EF reclassify: wrote ${written}, skipped ${plan.alreadyClassified.length} already-classified` +
+      (skippedMissing ? `, ${skippedMissing} with no file` : "") +
       (failed ? `, ${failed} failed (see console)` : "") +
       ".",
     8000,

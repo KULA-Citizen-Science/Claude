@@ -10,6 +10,17 @@ function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
+/** The task's vault-relative path, tolerant of where the runtime puts it. */
+export function resolveTaskPath(t: TaskNotesTask): string {
+  const rec = t as Record<string, unknown>;
+  const file = rec.file as Record<string, unknown> | undefined;
+  const candidates = [rec.path, file?.path, rec.filePath, rec.filepath];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "";
+}
+
 export function toPickerTask(t: TaskNotesTask): PickerTask {
   const tags = strArray(t.tags);
   return {

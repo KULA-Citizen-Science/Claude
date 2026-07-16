@@ -162,6 +162,18 @@ export class TaskNotesGateway {
     return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
   }
 
+  /** Does a real file exist at this vault path? Used to avoid firing writes at
+   *  phantom / stale index entries. */
+  fileExists(path: string): boolean {
+    if (!path) return false;
+    const normalized = path.replace(/^\/+/, "");
+    try {
+      return this.app.vault.getAbstractFileByPath(normalized) != null;
+    } catch {
+      return false;
+    }
+  }
+
   /** Set a task's status through the update service, with mutation context. */
   async setStatus(path: string, status: string, reason: string): Promise<WriteOutcome> {
     const api = this.apiWith("tasks.write");

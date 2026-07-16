@@ -559,6 +559,17 @@ var TaskNotesGateway = class {
     if (result.ok) return { ok: true, task: result.value };
     return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
   }
+  /** Does a real file exist at this vault path? Used to avoid firing writes at
+   *  phantom / stale index entries. */
+  fileExists(path) {
+    if (!path) return false;
+    const normalized = path.replace(/^\/+/, "");
+    try {
+      return this.app.vault.getAbstractFileByPath(normalized) != null;
+    } catch {
+      return false;
+    }
+  }
   /** Set a task's status through the update service, with mutation context. */
   async setStatus(path, status, reason) {
     const api = this.apiWith("tasks.write");
@@ -652,16 +663,55 @@ function isClassified(task) {
 
 // src/commands/reclassify.ts
 var import_obsidian = require("obsidian");
+
+// src/picker/map.ts
+var ARCHIVE_TAG = "archived";
+function strArray(v) {
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+}
+function resolveTaskPath(t) {
+  const rec = t;
+  const file = rec.file;
+  const candidates = [rec.path, file?.path, rec.filePath, rec.filepath];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "";
+}
+function toPickerTask(t) {
+  const tags = strArray(t.tags);
+  return {
+    path: t.path,
+    title: typeof t.title === "string" ? t.title : "",
+    status: typeof t.status === "string" ? t.status : void 0,
+    // TaskNotes marks archived tasks with the archive tag (and may also expose a
+    // boolean) — treat either as archived.
+    archived: t.archived === true || tags.includes(ARCHIVE_TAG),
+    due: typeof t.due === "string" ? t.due : null,
+    scheduled: typeof t.scheduled === "string" ? t.scheduled : null,
+    blockedBy: Array.isArray(t.blockedBy) ? t.blockedBy : null,
+    timeEstimate: typeof t.timeEstimate === "number" ? t.timeEstimate : null,
+    tags,
+    contexts: strArray(t.contexts),
+    recurrence: typeof t.recurrence === "string" ? t.recurrence : null,
+    ef_effort: t.ef_effort,
+    ef_primary: t.ef_primary
+  };
+}
+
+// src/commands/reclassify.ts
 function planReclassify(tasks, classifiedAt) {
   const alreadyClassified = [];
   const writes = [];
   for (const task of tasks) {
+    const path = resolveTaskPath(task);
+    if (!path) continue;
     if (isClassified(task)) {
-      alreadyClassified.push(task.path);
+      alreadyClassified.push(path);
       continue;
     }
     const classification = classify(toTaskDTO(task));
-    writes.push({ path: task.path, classification, patch: buildEfPatch(classification, classifiedAt) });
+    writes.push({ path, classification, patch: buildEfPatch(classification, classifiedAt) });
   }
   return { scanned: tasks.length, alreadyClassified, writes };
 }
@@ -698,7 +748,12 @@ async function runReclassify(gateway, opts) {
   }
   let written = 0;
   let failed = 0;
+  let skippedMissing = 0;
   for (const w of plan.writes) {
+    if (!gateway.fileExists(w.path)) {
+      skippedMissing++;
+      continue;
+    }
     const outcome = await gateway.updateTask(w.path, w.patch, "reclassify vault");
     if (outcome.ok) {
       written++;
@@ -708,7 +763,7 @@ async function runReclassify(gateway, opts) {
     }
   }
   new import_obsidian.Notice(
-    `EF reclassify: wrote ${written}, skipped ${plan.alreadyClassified.length} already-classified` + (failed ? `, ${failed} failed (see console)` : "") + ".",
+    `EF reclassify: wrote ${written}, skipped ${plan.alreadyClassified.length} already-classified` + (skippedMissing ? `, ${skippedMissing} with no file` : "") + (failed ? `, ${failed} failed (see console)` : "") + ".",
     8e3
   );
 }
@@ -899,32 +954,6 @@ function firstStep(primary, subtaskTitle) {
   return FIRST_STEP[primary];
 }
 
-// src/picker/map.ts
-var ARCHIVE_TAG = "archived";
-function strArray(v) {
-  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
-}
-function toPickerTask(t) {
-  const tags = strArray(t.tags);
-  return {
-    path: t.path,
-    title: typeof t.title === "string" ? t.title : "",
-    status: typeof t.status === "string" ? t.status : void 0,
-    // TaskNotes marks archived tasks with the archive tag (and may also expose a
-    // boolean) — treat either as archived.
-    archived: t.archived === true || tags.includes(ARCHIVE_TAG),
-    due: typeof t.due === "string" ? t.due : null,
-    scheduled: typeof t.scheduled === "string" ? t.scheduled : null,
-    blockedBy: Array.isArray(t.blockedBy) ? t.blockedBy : null,
-    timeEstimate: typeof t.timeEstimate === "number" ? t.timeEstimate : null,
-    tags,
-    contexts: strArray(t.contexts),
-    recurrence: typeof t.recurrence === "string" ? t.recurrence : null,
-    ef_effort: t.ef_effort,
-    ef_primary: t.ef_primary
-  };
-}
-
 // src/picker/start-modal.ts
 var IN_PROGRESS_STATUS = "in-progress";
 var EFFORT_LABEL = { 1: "very easy", 2: "easy", 3: "moderate", 4: "heavy" };
@@ -1106,31 +1135,51 @@ var DiagnoseModal = class extends import_obsidian4.Modal {
     super(app);
     this.gateway = gateway;
   }
-  onOpen() {
+  async onOpen() {
     injectStyles2();
-    this.titleEl.setText("EF field diagnosis");
+    this.titleEl.setText("EF diagnosis");
     const c = this.contentEl;
     c.addClass("ef-diagnose");
     if (!this.gateway.isAvailable()) {
       c.createEl("p", { text: "TaskNotes runtime API is not available (not loaded, or apiVersion \u2260 1)." });
       return;
     }
+    this.renderFields(c);
+    await this.renderTaskPaths(c);
+  }
+  renderFields(c) {
+    c.createEl("h4", { text: "User fields" });
     const raw = this.gateway.userFieldsRaw();
     if (raw === null) {
       c.createEl("p", { text: "Could not read the field catalog (catalog.read capability unavailable)." });
       return;
     }
-    c.createEl("p", { text: `TaskNotes reports ${raw.length} user field(s).` });
     const keys = this.gateway.userFieldKeys() ?? /* @__PURE__ */ new Set();
     const found = EF_FIELD_KEYS.filter((k) => keys.has(k));
     const missing = EF_FIELD_KEYS.filter((k) => !keys.has(k));
     c.createEl("p", {
       cls: found.length === EF_FIELD_KEYS.length ? "ef-ok" : "ef-bad",
-      text: `EF fields detected: ${found.length}/${EF_FIELD_KEYS.length}`
+      text: `EF fields detected: ${found.length}/${EF_FIELD_KEYS.length}` + (missing.length ? ` (missing: ${missing.join(", ")})` : "")
     });
-    if (missing.length) c.createEl("p", { text: `Missing: ${missing.join(", ")}` });
-    c.createEl("p", { text: "Raw field data from TaskNotes (screenshot this if fields are missing):" });
-    c.createEl("pre", { text: JSON.stringify(raw, null, 2) });
+  }
+  async renderTaskPaths(c) {
+    c.createEl("h4", { text: "Task paths" });
+    const loading = c.createEl("p", { text: "Checking tasks\u2026" });
+    const tasks = await this.gateway.listTasks();
+    loading.remove();
+    const missing = tasks.filter((t) => !this.gateway.fileExists(resolveTaskPath(t)));
+    c.createEl("p", {
+      cls: missing.length ? "ef-bad" : "ef-ok",
+      text: `listTasks() returned ${tasks.length}; ${missing.length} have no matching file on disk.`
+    });
+    const sample = tasks.slice(0, 5).map((t) => {
+      const p = resolveTaskPath(t);
+      return `${this.gateway.fileExists(p) ? "\u2713" : "\u2717"} ${p || "(no path resolved)"}`;
+    });
+    c.createEl("p", { text: "Sample paths (\u2713 = file found), then the first raw task object:" });
+    c.createEl("pre", {
+      text: sample.join("\n") + (tasks[0] ? "\n\n" + JSON.stringify(tasks[0], null, 2) : "")
+    });
   }
   onClose() {
     this.contentEl.empty();
