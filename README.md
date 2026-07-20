@@ -15,8 +15,13 @@ bevelled VGA panels, a pixel-art mascot, faint CRT scanlines, all hand-drawn in 
 2. **Choose your quest** → tap a common ADHD-hard archetype (The Boring Admin, The Appointment,
    The Big Project, The Chore You Avoid, The Wind-Down, The Errand, The Reply), or **Other…** and
    flick a few toggles to describe any activity.
-3. **Reading** → a card with `THE TRAP` (one line), a tiny framework tag + evidence marker, and
-   `THE ESCAPE` (one line). **NEXT TRAP** cycles the lower-ranked frictions; **NEW QUEST** resets.
+3. **Reading** → a point-and-click style *scene*: a quest-tinted starfield room with the quest's
+   prop on the wall, the mascot facing a symbolic pixel-art image of the trap (a cracked wall, a
+   sprinting alarm clock, a road with no finish line…), and the escape strategy sitting in an
+   inventory slot (`USE:`). Below it, the card: `THE TRAP` (one line), a tiny framework tag +
+   evidence marker, and `THE ESCAPE` (one line). Star placement is seeded per (quest, trap), so
+   every combination gets its own unique picture. **NEXT TRAP** cycles the lower-ranked
+   frictions; **NEW QUEST** resets.
 
 The card's evidence marker is honest about tiers: **`✓` peer-reviewed** vs **`~` clinical
 heuristic** (Barkley, Marx/Zheng, Safren/Solanto, Gollwitzer are peer-reviewed; Dodson's INCUP and
@@ -29,7 +34,10 @@ the "Wall of Awful" are useful heuristics, and labelled as such).
 - `core/` — plain Kotlin/JVM module, **no Android dependency**. The entire taxonomy and reasoning
   engine live here: activity dimensions (`Activity`), the friction taxonomy (`FrictionPoint` /
   `FrictionCatalog`), the evidence-graded framework catalog (`Framework`), the pre-tagged
-  archetypes (`Archetypes`), and the ranking engine (`FrictionEngine`). Fully JUnit-tested.
+  archetypes (`Archetypes`), and the ranking engine (`FrictionEngine`). The scene art also lives
+  here as data: `art/Sprite` + `art/SceneArt` hold the 13 trap sprites and 13 escape emblems as
+  character grids, so tests can verify the art catalog (rectangular, on-palette, full coverage of
+  the taxonomy) without a renderer. Fully JUnit-tested.
 - `app/` — the Android app: Jetpack Compose UI (`Home` / `Picker` / `Reading`) and the hand-drawn
   retro toolkit (bevelled panels, pixel buttons, mascot, icons). Depends on `:core`.
 - `docs/` — the evidence write-up (`RESEARCH.md`) and the source research brief

@@ -38,7 +38,7 @@ import com.kula.nextquest.ui.components.pixelBevel
 import com.kula.nextquest.ui.theme.Retro
 
 @Composable
-fun PickerScreen(onPick: (Activity) -> Unit, onBack: () -> Unit) {
+fun PickerScreen(onPick: (Activity, String) -> Unit, onBack: () -> Unit) {
     var showCustom by remember { mutableStateOf(false) }
 
     Column(
@@ -63,7 +63,7 @@ fun PickerScreen(onPick: (Activity) -> Unit, onBack: () -> Unit) {
                         name = arch.activity.name,
                         icon = arch.icon,
                         modifier = Modifier.weight(1f),
-                        onClick = { onPick(arch.activity) },
+                        onClick = { onPick(arch.activity, arch.icon) },
                     )
                 }
                 if (rowItems.size == 1) Spacer(Modifier.weight(1f))
@@ -113,7 +113,7 @@ private fun ArchetypeCard(
 }
 
 @Composable
-private fun CustomPanel(onRead: (Activity) -> Unit) {
+private fun CustomPanel(onRead: (Activity, String) -> Unit) {
     var boring by remember { mutableStateOf(false) }
     var hardDeadline by remember { mutableStateOf(false) }
     var unclear by remember { mutableStateOf(false) }
@@ -147,6 +147,7 @@ private fun CustomPanel(onRead: (Activity) -> Unit) {
                         requiresLeavingHome = leaveHouse,
                         hasDread = dread,
                     ),
+                    "question",
                 )
             },
             fill = Retro.Gold,

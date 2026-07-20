@@ -18,7 +18,7 @@ import com.kula.nextquest.ui.theme.Retro
 private sealed interface Screen {
     data object Home : Screen
     data object Picker : Screen
-    data class Reading(val activity: Activity) : Screen
+    data class Reading(val activity: Activity, val icon: String) : Screen
 }
 
 @Composable
@@ -41,11 +41,12 @@ fun NextQuestApp() {
         when (val s = screen) {
             Screen.Home -> HomeScreen(onStart = { screen = Screen.Picker })
             Screen.Picker -> PickerScreen(
-                onPick = { activity -> screen = Screen.Reading(activity) },
+                onPick = { activity, icon -> screen = Screen.Reading(activity, icon) },
                 onBack = { screen = Screen.Home },
             )
             is Screen.Reading -> ReadingScreen(
                 activity = s.activity,
+                icon = s.icon,
                 onNewQuest = { screen = Screen.Picker },
             )
         }

@@ -31,10 +31,11 @@ import com.kula.nextquest.domain.FrictionEngine
 import com.kula.nextquest.ui.components.FrameworkChip
 import com.kula.nextquest.ui.components.PixelButton
 import com.kula.nextquest.ui.components.PixelPanel
+import com.kula.nextquest.ui.components.SceneCard
 import com.kula.nextquest.ui.theme.Retro
 
 @Composable
-fun ReadingScreen(activity: Activity, onNewQuest: () -> Unit) {
+fun ReadingScreen(activity: Activity, icon: String, onNewQuest: () -> Unit) {
     val points = remember(activity) { FrictionEngine.analyze(activity) }
     var index by remember(activity) { mutableIntStateOf(0) }
     val fp = points[index]
@@ -55,6 +56,9 @@ fun ReadingScreen(activity: Activity, onNewQuest: () -> Unit) {
             style = Retro.Small,
             color = Retro.CreamDim,
         )
+        Spacer(Modifier.height(16.dp))
+
+        SceneCard(icon = icon, frictionId = fp.id)
         Spacer(Modifier.height(16.dp))
 
         PixelPanel(modifier = Modifier.fillMaxWidth()) {

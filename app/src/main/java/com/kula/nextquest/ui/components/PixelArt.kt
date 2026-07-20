@@ -136,6 +136,15 @@ fun PixelIcon(
                     style = Stroke(stroke),
                 )
             }
+            "question" -> {
+                drawArc(
+                    color = color, startAngle = -210f, sweepAngle = 255f, useCenter = false,
+                    topLeft = Offset(s * 0.28f, s * 0.12f), size = Size(s * 0.44f, s * 0.40f),
+                    style = Stroke(stroke),
+                )
+                drawLine(color, Offset(s * 0.5f, s * 0.48f), Offset(s * 0.5f, s * 0.66f), strokeWidth = stroke)
+                drawCircle(color, radius = stroke * 0.7f, center = Offset(s * 0.5f, s * 0.84f))
+            }
             else -> drawCircle(color, radius = s * 0.30f, center = Offset(s * 0.5f, s * 0.5f), style = Stroke(stroke))
         }
     }
