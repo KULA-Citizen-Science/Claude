@@ -37,10 +37,9 @@ the "Wall of Awful" are useful heuristics, and labelled as such).
 
 ## Building & testing
 
-This repo was scaffolded in a sandbox with **no Android SDK**, so only `:core` (plain Kotlin/JVM)
-is compiled and tested here — `gradle :core:test` passes (18/18 tests) and is the authoritative
-check on the taxonomy/ranking. The `:app` module needs the Android SDK to build and has **not**
-been compiled in this environment; review it accordingly.
+`gradle :core:test` passes (18/18 tests) and is the authoritative check on the taxonomy/ranking.
+The `:app` module builds successfully (`:app:assembleDebug` verified with SDK platform 34 /
+build-tools 34.0.0); runtime behaviour still needs the manual on-device checklist below.
 
 Run the engine tests (no Android SDK needed):
 
