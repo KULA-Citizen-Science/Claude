@@ -1,26 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Stylus Notes</string>
-    <string name="note_list_title">Notes</string>
-    <string name="new_note">New note</string>
-    <string name="untitled_note">Untitled note</string>
-    <string name="action_undo">Undo</string>
-    <string name="action_redo">Redo</string>
-    <string name="action_toggle_background">Switch background</string>
-    <string name="action_export">Export</string>
-    <string name="action_color">Ink color</string>
-    <string name="export_as_png">Export as PNG</string>
-    <string name="export_as_pdf">Export as PDF</string>
-    <string name="ink_color_adaptive">Adaptive (auto-contrast)</string>
-    <string name="rename_note">Rename note</string>
-    <string name="rename_note_label">Title</string>
-    <string name="action_rename">Rename</string>
-    <string name="action_delete">Delete</string>
-    <string name="action_cancel">Cancel</string>
-    <string name="action_save">Save</string>
-    <string name="action_fit_view">Fit</string>
-    <string name="pen_width_fine">Fine</string>
-    <string name="pen_width_medium">Medium</string>
-    <string name="pen_width_bold">Bold</string>
-    <string name="pen_width_marker">Marker</string>
+    <string name="app_name">NextQuest</string>
 </resources>

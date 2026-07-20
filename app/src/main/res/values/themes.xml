@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.StylusNotes" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Dark, chrome-less base; all real styling is done in Compose (see ui/theme). -->
+    <style name="Theme.NextQuest" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/quest_background</item>
+        <item name="android:statusBarColor">@color/quest_background</item>
+        <item name="android:navigationBarColor">@color/quest_background</item>
+    </style>
 </resources>

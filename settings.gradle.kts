@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StylusNotes"
+rootProject.name = "NextQuest"
 include(":app")
 include(":core")
