@@ -6,8 +6,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +43,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
@@ -260,17 +261,33 @@ private fun ZoneSection(
                                         onCellCenter(cell.id, center)
                                     }
                                 }
+                                // One combined gesture handler: a quick press without movement is a
+                                // tap; crossing the touch slop starts a drag. Kept in a single
+                                // pointerInput so the tap detector can't swallow the drag's down event.
                                 .pointerInput(cell.id) {
-                                    detectTapGestures(onTap = { onTap(cell.id) })
-                                }
-                                .pointerInput(cell.id) {
-                                    detectDragGestures(
-                                        onDragStart = { onDragStart(cell.id) },
-                                        onDragEnd = onDragEnd,
-                                        onDragCancel = onDragEnd,
-                                    ) { change, dragAmount ->
-                                        change.consume()
-                                        onDrag(cell.id, dragAmount)
+                                    val touchSlop = viewConfiguration.touchSlop
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        var dragging = false
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                            if (!change.pressed) {
+                                                if (!dragging) onTap(cell.id)
+                                                break
+                                            }
+                                            if (!dragging) {
+                                                if ((change.position - down.position).getDistance() > touchSlop) {
+                                                    dragging = true
+                                                    onDragStart(cell.id)
+                                                    change.consume()
+                                                }
+                                            } else {
+                                                onDrag(cell.id, change.positionChange())
+                                                change.consume()
+                                            }
+                                        }
+                                        if (dragging) onDragEnd()
                                     }
                                 },
                         )
