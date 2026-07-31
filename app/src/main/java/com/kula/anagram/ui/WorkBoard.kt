@@ -115,26 +115,44 @@ fun WorkBoard(
 
     // Where would the dragged cell drop, given the finger position? Returns the target board and the
     // insertion index into that board's list (with the dragged cell removed).
+    //
+    // The decision is driven by the *nearest cell*, not by hit-testing the zone rectangles: cell
+    // centres are continuously re-measured (the dragged tile tracks the finger from them), whereas a
+    // static zone rectangle can be captured at a stale position and then never refresh. The rectangles
+    // are consulted only to allow dropping into a board that is currently empty.
     fun targetFor(id: Int, finger: Offset): Pair<Zone, Int>? {
         val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
-        val zone = zoneRects.entries
+
+        // Board the finger sits inside — used only to drop into an empty board.
+        val insideZone = zoneRects.entries
             .firstOrNull { (z, rect) -> (!isSpace || z == Zone.WERKBANK) && rect.contains(finger) }
-            ?.key ?: return null
-        val others = cellsOf(zone).filter { it.id != id }
-        if (others.isEmpty()) return zone to 0
+            ?.key
+        if (insideZone != null && cellsOf(insideZone).none { it.id != id }) {
+            return insideZone to 0
+        }
+
+        // Otherwise snap next to the nearest cell in either board.
+        var bestZone: Zone? = null
         var bestIndex = 0
         var bestDistance = Float.MAX_VALUE
         var bestAfter = false
-        others.forEachIndexed { index, cell ->
-            val c = centers[cell.id] ?: return@forEachIndexed
-            val d = (c - finger).getDistanceSquared()
-            if (d < bestDistance) {
-                bestDistance = d
-                bestIndex = index
-                bestAfter = finger.x > c.x
+        fun consider(zone: Zone) {
+            cellsOf(zone).filter { it.id != id }.forEachIndexed { index, cell ->
+                val c = centers[cell.id] ?: return@forEachIndexed
+                val d = (c - finger).getDistanceSquared()
+                if (d < bestDistance) {
+                    bestDistance = d
+                    bestZone = zone
+                    bestIndex = index
+                    bestAfter = finger.x > c.x
+                }
             }
         }
-        return zone to (bestIndex + if (bestAfter) 1 else 0)
+        consider(Zone.WERKBANK)
+        if (!isSpace) consider(Zone.ABLAGE)
+
+        bestZone?.let { return it to (bestIndex + if (bestAfter) 1 else 0) }
+        return insideZone?.let { it to 0 }
     }
 
     // Called once, when the finger lifts: place the dragged cell where it was released.
@@ -372,16 +390,22 @@ private fun CellView(
  */
 private fun Modifier.animatePlacement(): Modifier = composed {
     val scope = rememberCoroutineScope()
-    var targetOffset by remember { mutableStateOf(IntOffset.Zero) }
+    var target by remember { mutableStateOf<IntOffset?>(null) }
     var animatable by remember { mutableStateOf<Animatable<IntOffset, AnimationVector2D>?>(null) }
     this
-        .onPlaced { coordinates -> targetOffset = coordinates.positionInParent().round() }
+        .onPlaced { coordinates ->
+            val placed = coordinates.positionInParent().round()
+            target = placed
+            val anim = animatable
+            when {
+                anim == null -> animatable = Animatable(placed, IntOffset.VectorConverter)
+                anim.targetValue != placed ->
+                    scope.launch { anim.animateTo(placed, spring(stiffness = Spring.StiffnessMediumLow)) }
+            }
+        }
         .offset {
             val anim = animatable
-                ?: Animatable(targetOffset, IntOffset.VectorConverter).also { animatable = it }
-            if (anim.targetValue != targetOffset) {
-                scope.launch { anim.animateTo(targetOffset, spring(stiffness = Spring.StiffnessMediumLow)) }
-            }
-            anim.value - targetOffset
+            val t = target
+            if (anim == null || t == null) IntOffset.Zero else anim.value - t
         }
 }
