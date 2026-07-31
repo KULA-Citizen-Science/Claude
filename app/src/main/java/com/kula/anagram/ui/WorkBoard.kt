@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,14 +68,15 @@ private val ZoneMinHeight = 72.dp
 
 /**
  * The interactive two-board area: a **Werkbank** (workbench) where the anagram is assembled and an
- * **Ablageboard** (tray) where letters can be parked. A cell can be dragged freely — within a board
- * to reorder, or across to the other board — and while a drag is in flight the cell floats under the
- * finger, the others glide aside to open a gap, and the boards update live. Tapping a letter sends it
- * to the other board; tapping a space removes it. "+ Leerzeichen" adds a space to the workbench.
+ * **Ablageboard** (tray) where letters can be parked. Drag a cell to lift it — it floats under the
+ * finger — and release it where it should go: within a board to reorder, or over the other board to
+ * move it there. Tapping a letter sends it to the other board; tapping a space removes it.
+ * "+ Leerzeichen" adds a space to the workbench.
  *
- * All hit-testing works in window coordinates (see [positionInWindow]); that keeps the cell centres,
- * the zone rectangles and the dragged finger in one coordinate space without depending on the order
- * in which the layout nodes happen to be positioned.
+ * Hit-testing works in window coordinates ([positionInWindow]) so cell centres, zone rectangles and
+ * the dragged finger all live in one space regardless of layout ordering. The current board contents
+ * are read through [rememberUpdatedState] because a `pointerInput` block, once started, is never
+ * restarted for a stable key and would otherwise capture a stale, first-frame copy of the lists.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,6 +91,10 @@ fun WorkBoard(
     val density = LocalDensity.current
     val halfTilePx = with(density) { TileSize.toPx() } / 2f
 
+    // Always-current views of the lists, safe to read from the long-lived gesture coroutines.
+    val werkbankState = rememberUpdatedState(werkbank)
+    val ablageState = rememberUpdatedState(ablage)
+
     // Window-space geometry, shared across both zones.
     val centers = remember { mutableStateMapOf<Int, Offset>() }
     val zoneRects = remember { mutableStateMapOf<Zone, Rect>() }
@@ -96,17 +102,19 @@ fun WorkBoard(
     var draggingId by remember { mutableStateOf<Int?>(null) }
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
 
-    fun cellsOf(zone: Zone): List<Cell> = if (zone == Zone.WERKBANK) werkbank else ablage
+    fun cellsOf(zone: Zone): List<Cell> =
+        if (zone == Zone.WERKBANK) werkbankState.value else ablageState.value
 
     fun currentPosition(id: Int): Pair<Zone, Int>? {
-        werkbank.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.WERKBANK to it }
-        ablage.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.ABLAGE to it }
+        werkbankState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.WERKBANK to it }
+        ablageState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.ABLAGE to it }
         return null
     }
 
     // Where would the dragged cell drop, given the finger position? Returns the target board and the
     // insertion index into that board's list (with the dragged cell removed).
-    fun targetFor(id: Int, isSpace: Boolean, finger: Offset): Pair<Zone, Int>? {
+    fun targetFor(id: Int, finger: Offset): Pair<Zone, Int>? {
+        val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
         val zone = zoneRects.entries
             .firstOrNull { (z, rect) -> (!isSpace || z == Zone.WERKBANK) && rect.contains(finger) }
             ?.key ?: return null
@@ -127,12 +135,17 @@ fun WorkBoard(
         return zone to (bestIndex + if (bestAfter) 1 else 0)
     }
 
-    fun onDragMove(id: Int) {
-        val isSpace = werkbank.firstOrNull { it.id == id } is Cell.Space
-        val target = targetFor(id, isSpace, floatCenter) ?: return
-        if (currentPosition(id) == target) return
-        onDrop(id, target.first, target.second)
+    // Called once, when the finger lifts: place the dragged cell where it was released.
+    fun finishDrag(id: Int) {
+        val target = targetFor(id, floatCenter)
+        if (target != null && currentPosition(id) != target) {
+            onDrop(id, target.first, target.second)
+        }
+        draggingId = null
     }
+
+    val startDrag: (Int) -> Unit = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero }
+    val dragBy: (Offset) -> Unit = { delta -> floatCenter += delta }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -144,9 +157,9 @@ fun WorkBoard(
                 onZoneBounds = { zoneRects[Zone.WERKBANK] = it },
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
-                onDragStart = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero },
-                onDrag = { id, delta -> floatCenter += delta; onDragMove(id) },
-                onDragEnd = { draggingId = null },
+                onDragStart = startDrag,
+                onDrag = dragBy,
+                onDragEnd = { id -> finishDrag(id) },
                 trailing = {
                     OutlinedButton(onClick = onAddSpace) {
                         Text(stringResource(R.string.action_add_space))
@@ -161,9 +174,9 @@ fun WorkBoard(
                 onZoneBounds = { zoneRects[Zone.ABLAGE] = it },
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
-                onDragStart = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero },
-                onDrag = { id, delta -> floatCenter += delta; onDragMove(id) },
-                onDragEnd = { draggingId = null },
+                onDragStart = startDrag,
+                onDrag = dragBy,
+                onDragEnd = { id -> finishDrag(id) },
                 trailing = null,
             )
         }
@@ -201,8 +214,8 @@ private fun ZoneSection(
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
     onDragStart: (Int) -> Unit,
-    onDrag: (Int, Offset) -> Unit,
-    onDragEnd: () -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: (Int) -> Unit,
     trailing: (@Composable () -> Unit)?,
 ) {
     Column {
@@ -281,11 +294,11 @@ private fun ZoneSection(
                                                     change.consume()
                                                 }
                                             } else {
-                                                onDrag(cell.id, change.positionChange())
+                                                onDrag(change.positionChange())
                                                 change.consume()
                                             }
                                         }
-                                        if (dragging) onDragEnd()
+                                        if (dragging) onDragEnd(cell.id)
                                     }
                                 },
                         )
@@ -342,7 +355,7 @@ private fun CellView(
 
 /**
  * Animates a child from its previous placement to its new one whenever the layout reorders, so cells
- * slide aside smoothly instead of jumping. Adapted from the AOSP Compose animation samples.
+ * slide into place smoothly instead of jumping. Adapted from the AOSP Compose animation samples.
  */
 private fun Modifier.animatePlacement(): Modifier = composed {
     val scope = rememberCoroutineScope()
