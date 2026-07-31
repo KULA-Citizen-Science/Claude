@@ -4,13 +4,43 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A simple stylus nib stroke on a page, standing in for a real launcher icon. -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,78 L74,34 L82,42 L38,86 L28,88 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:pathData="M24,90 L30,78 L38,86 Z" />
+    <!-- Two staggered, tilted letter tiles ("A" and "Z") standing for rearranging letters. -->
+
+    <!-- Tile "A" -->
+    <group
+        android:name="tileA"
+        android:translateX="20"
+        android:translateY="40"
+        android:pivotX="17"
+        android:pivotY="17"
+        android:rotation="-14">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M7,0 L27,0 A7,7 0 0 1 34,7 L34,27 A7,7 0 0 1 27,34 L7,34 A7,7 0 0 1 0,27 L0,7 A7,7 0 0 1 7,0 Z" />
+        <path
+            android:strokeColor="#4B5BD6"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M8,26 L17,8 L26,26 M11,20 L23,20" />
+    </group>
+
+    <!-- Tile "Z" -->
+    <group
+        android:name="tileZ"
+        android:translateX="54"
+        android:translateY="34"
+        android:pivotX="17"
+        android:pivotY="17"
+        android:rotation="13">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M7,0 L27,0 A7,7 0 0 1 34,7 L34,27 A7,7 0 0 1 27,34 L7,34 A7,7 0 0 1 0,27 L0,7 A7,7 0 0 1 7,0 Z" />
+        <path
+            android:strokeColor="#4B5BD6"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M9,9 L25,9 L10,25 L25,25" />
+    </group>
 </vector>
