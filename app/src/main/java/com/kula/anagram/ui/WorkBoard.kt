@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,10 +43,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +71,10 @@ private val ZoneMinHeight = 72.dp
  * to reorder, or across to the other board — and while a drag is in flight the cell floats under the
  * finger, the others glide aside to open a gap, and the boards update live. Tapping a letter sends it
  * to the other board; tapping a space removes it. "+ Leerzeichen" adds a space to the workbench.
+ *
+ * All hit-testing works in window coordinates (see [positionInWindow]); that keeps the cell centres,
+ * the zone rectangles and the dragged finger in one coordinate space without depending on the order
+ * in which the layout nodes happen to be positioned.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,10 +89,10 @@ fun WorkBoard(
     val density = LocalDensity.current
     val halfTilePx = with(density) { TileSize.toPx() } / 2f
 
-    // Everything measured in the coordinate space of this root Box.
-    var rootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Window-space geometry, shared across both zones.
     val centers = remember { mutableStateMapOf<Int, Offset>() }
     val zoneRects = remember { mutableStateMapOf<Zone, Rect>() }
+    var rootWindowPos by remember { mutableStateOf(Offset.Zero) }
     var draggingId by remember { mutableStateOf<Int?>(null) }
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
 
@@ -124,26 +127,25 @@ fun WorkBoard(
         return zone to (bestIndex + if (bestAfter) 1 else 0)
     }
 
-    fun onDragMove(id: Int, isSpace: Boolean) {
+    fun onDragMove(id: Int) {
+        val isSpace = werkbank.firstOrNull { it.id == id } is Cell.Space
         val target = targetFor(id, isSpace, floatCenter) ?: return
         if (currentPosition(id) == target) return
         onDrop(id, target.first, target.second)
     }
 
-    Box(modifier = modifier.onGloballyPositioned { rootCoords = it }) {
+    Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             ZoneSection(
                 title = stringResource(R.string.zone_werkbank),
                 subtitle = stringResource(R.string.zone_werkbank_hint),
-                zone = Zone.WERKBANK,
                 cells = werkbank,
                 draggingId = draggingId,
                 onZoneBounds = { zoneRects[Zone.WERKBANK] = it },
                 onCellCenter = { id, c -> centers[id] = c },
-                rootCoords = { rootCoords },
                 onTap = onTap,
                 onDragStart = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero },
-                onDrag = { id, delta -> floatCenter += delta; onDragMove(id, isSpace = werkbankHasSpace(werkbank, id)) },
+                onDrag = { id, delta -> floatCenter += delta; onDragMove(id) },
                 onDragEnd = { draggingId = null },
                 trailing = {
                     OutlinedButton(onClick = onAddSpace) {
@@ -154,21 +156,20 @@ fun WorkBoard(
             ZoneSection(
                 title = stringResource(R.string.zone_ablage),
                 subtitle = stringResource(R.string.zone_ablage_hint),
-                zone = Zone.ABLAGE,
                 cells = ablage,
                 draggingId = draggingId,
                 onZoneBounds = { zoneRects[Zone.ABLAGE] = it },
                 onCellCenter = { id, c -> centers[id] = c },
-                rootCoords = { rootCoords },
                 onTap = onTap,
                 onDragStart = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero },
-                onDrag = { id, delta -> floatCenter += delta; onDragMove(id, isSpace = false) },
+                onDrag = { id, delta -> floatCenter += delta; onDragMove(id) },
                 onDragEnd = { draggingId = null },
                 trailing = null,
             )
         }
 
         // The floating copy of the cell being dragged, pinned under the finger and drawn on top.
+        // floatCenter is in window space; subtract the board's own window origin to place it locally.
         val active = draggingId
         if (active != null) {
             val cell = werkbank.firstOrNull { it.id == active } ?: ablage.firstOrNull { it.id == active }
@@ -179,8 +180,8 @@ fun WorkBoard(
                     lifted = true,
                     modifier = Modifier.offset {
                         IntOffset(
-                            (floatCenter.x - halfTilePx).roundToInt(),
-                            (floatCenter.y - halfTilePx).roundToInt(),
+                            (floatCenter.x - rootWindowPos.x - halfTilePx).roundToInt(),
+                            (floatCenter.y - rootWindowPos.y - halfTilePx).roundToInt(),
                         )
                     },
                 )
@@ -189,20 +190,15 @@ fun WorkBoard(
     }
 }
 
-private fun werkbankHasSpace(werkbank: List<Cell>, id: Int): Boolean =
-    werkbank.firstOrNull { it.id == id } is Cell.Space
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ZoneSection(
     title: String,
     subtitle: String,
-    zone: Zone,
     cells: List<Cell>,
     draggingId: Int?,
     onZoneBounds: (Rect) -> Unit,
     onCellCenter: (Int, Offset) -> Unit,
-    rootCoords: () -> LayoutCoordinates?,
     onTap: (Int) -> Unit,
     onDragStart: (Int) -> Unit,
     onDrag: (Int, Offset) -> Unit,
@@ -235,10 +231,13 @@ private fun ZoneSection(
                     .defaultMinSize(minHeight = ZoneMinHeight)
                     .padding(10.dp)
                     .onGloballyPositioned { coords ->
-                        val root = rootCoords()
-                        if (root != null && coords.isAttached) {
-                            val topLeft = root.localPositionOf(coords, Offset.Zero)
-                            onZoneBounds(Rect(topLeft, Size(coords.size.width.toFloat(), coords.size.height.toFloat())))
+                        if (coords.isAttached) {
+                            onZoneBounds(
+                                Rect(
+                                    coords.positionInWindow(),
+                                    Size(coords.size.width.toFloat(), coords.size.height.toFloat()),
+                                ),
+                            )
                         }
                     },
                 horizontalArrangement = Arrangement.spacedBy(TileSpacing),
@@ -252,13 +251,12 @@ private fun ZoneSection(
                             modifier = Modifier
                                 .animatePlacement()
                                 .onGloballyPositioned { coords ->
-                                    val root = rootCoords()
-                                    if (root != null && coords.isAttached) {
-                                        val center = root.localPositionOf(
-                                            coords,
-                                            Offset(coords.size.width / 2f, coords.size.height / 2f),
+                                    if (coords.isAttached) {
+                                        onCellCenter(
+                                            cell.id,
+                                            coords.positionInWindow() +
+                                                Offset(coords.size.width / 2f, coords.size.height / 2f),
                                         )
-                                        onCellCenter(cell.id, center)
                                     }
                                 }
                                 // One combined gesture handler: a quick press without movement is a
