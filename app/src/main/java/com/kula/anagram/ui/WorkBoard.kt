@@ -39,8 +39,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -97,7 +95,6 @@ fun WorkBoard(
 
     // Window-space geometry, shared across both zones.
     val centers = remember { mutableStateMapOf<Int, Offset>() }
-    val zoneRects = remember { mutableStateMapOf<Zone, Rect>() }
     var rootWindowPos by remember { mutableStateOf(Offset.Zero) }
     var draggingId by remember { mutableStateOf<Int?>(null) }
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
@@ -116,50 +113,70 @@ fun WorkBoard(
     // Where would the dragged cell drop, given the finger position? Returns the target board and the
     // insertion index into that board's list (with the dragged cell removed).
     //
-    // The decision is driven by the *nearest cell*, not by hit-testing the zone rectangles: cell
-    // centres are continuously re-measured (the dragged tile tracks the finger from them), whereas a
-    // static zone rectangle can be captured at a stale position and then never refresh. The rectangles
-    // are consulted only to allow dropping into a board that is currently empty.
+    // This deliberately uses *only* the measured cell centres — verified correct against a screen
+    // recording — and never the zone rectangles, which were observed to be stale for the workbench and
+    // made every in-board drop resolve to "no target". An empty board is reached by checking whether
+    // the finger sits clearly beyond the occupied board's cells, the workbench always being above the
+    // tray. As a result a drop resolves to a real slot whenever any other cell exists.
     fun targetFor(id: Int, finger: Offset): Pair<Zone, Int>? {
         val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
+        val werkCells = werkbankState.value.filter { it.id != id }
+        val trayCells = if (isSpace) emptyList() else ablageState.value.filter { it.id != id }
+        val threshold = with(density) { TileSize.toPx() }
 
-        // Board the finger sits inside — used only to drop into an empty board.
-        val insideZone = zoneRects.entries
-            .firstOrNull { (z, rect) -> (!isSpace || z == Zone.WERKBANK) && rect.contains(finger) }
-            ?.key
-        if (insideZone != null && cellsOf(insideZone).none { it.id != id }) {
-            return insideZone to 0
-        }
-
-        // Otherwise snap next to the nearest cell in either board.
-        var bestZone: Zone? = null
-        var bestIndex = 0
-        var bestDistance = Float.MAX_VALUE
-        var bestAfter = false
-        fun consider(zone: Zone) {
-            cellsOf(zone).filter { it.id != id }.forEachIndexed { index, cell ->
+        fun nearestIn(zone: Zone, cells: List<Cell>): Pair<Zone, Int>? {
+            var bestIndex = -1
+            var bestDistance = Float.MAX_VALUE
+            var bestAfter = false
+            cells.forEachIndexed { index, cell ->
                 val c = centers[cell.id] ?: return@forEachIndexed
                 val d = (c - finger).getDistanceSquared()
                 if (d < bestDistance) {
                     bestDistance = d
-                    bestZone = zone
                     bestIndex = index
                     bestAfter = finger.x > c.x
                 }
             }
+            return if (bestIndex < 0) null else zone to (bestIndex + if (bestAfter) 1 else 0)
         }
-        consider(Zone.WERKBANK)
-        if (!isSpace) consider(Zone.ABLAGE)
 
-        bestZone?.let { return it to (bestIndex + if (bestAfter) 1 else 0) }
-        return insideZone?.let { it to 0 }
+        // Only the tray holds cells: allow reaching the empty workbench by dropping above them.
+        if (werkCells.isEmpty()) {
+            val topOfTray = trayCells.mapNotNull { centers[it.id]?.y }.minOrNull() ?: return Zone.WERKBANK to 0
+            if (finger.y < topOfTray - threshold) return Zone.WERKBANK to 0
+            return nearestIn(Zone.ABLAGE, trayCells) ?: (Zone.WERKBANK to 0)
+        }
+
+        // Only the workbench holds cells: allow reaching the empty tray by dropping below them.
+        if (trayCells.isEmpty()) {
+            if (!isSpace) {
+                val bottomOfWerkbank = werkCells.mapNotNull { centers[it.id]?.y }.maxOrNull()
+                if (bottomOfWerkbank != null && finger.y > bottomOfWerkbank + threshold) {
+                    return Zone.ABLAGE to 0
+                }
+            }
+            return nearestIn(Zone.WERKBANK, werkCells)
+        }
+
+        // Both boards hold cells: whichever cell is closest wins.
+        val a = nearestIn(Zone.WERKBANK, werkCells)
+        val b = nearestIn(Zone.ABLAGE, trayCells)
+        val da = werkCells.mapNotNull { centers[it.id] }.minOfOrNull { (it - finger).getDistanceSquared() }
+        val db = trayCells.mapNotNull { centers[it.id] }.minOfOrNull { (it - finger).getDistanceSquared() }
+        return when {
+            da == null -> b
+            db == null -> a
+            da <= db -> a
+            else -> b
+        }
     }
 
     // Called once, when the finger lifts: place the dragged cell where it was released.
     fun finishDrag(id: Int) {
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
-        debug = "drop id=$id cur=$cur tgt=$target zonen=${zoneRects.size} kacheln=${centers.size}"
+        debug = "B8 drop id=$id f=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
+            "cur=$cur tgt=$target kacheln=${centers.size}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
@@ -169,7 +186,7 @@ fun WorkBoard(
     val startDrag: (Int) -> Unit = { id ->
         draggingId = id
         floatCenter = centers[id] ?: Offset.Zero
-        debug = "ziehe id=$id  finger=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
+        debug = "B8 ziehe id=$id start=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
     }
     val dragBy: (Offset) -> Unit = { delta -> floatCenter += delta }
 
@@ -180,7 +197,6 @@ fun WorkBoard(
                 subtitle = stringResource(R.string.zone_werkbank_hint),
                 cells = werkbank,
                 draggingId = draggingId,
-                onZoneBounds = { zoneRects[Zone.WERKBANK] = it },
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onDragStart = startDrag,
@@ -197,7 +213,6 @@ fun WorkBoard(
                 subtitle = stringResource(R.string.zone_ablage_hint),
                 cells = ablage,
                 draggingId = draggingId,
-                onZoneBounds = { zoneRects[Zone.ABLAGE] = it },
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onDragStart = startDrag,
@@ -241,7 +256,6 @@ private fun ZoneSection(
     subtitle: String,
     cells: List<Cell>,
     draggingId: Int?,
-    onZoneBounds: (Rect) -> Unit,
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
     onDragStart: (Int) -> Unit,
@@ -273,17 +287,7 @@ private fun ZoneSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = ZoneMinHeight)
-                    .padding(10.dp)
-                    .onGloballyPositioned { coords ->
-                        if (coords.isAttached) {
-                            onZoneBounds(
-                                Rect(
-                                    coords.positionInWindow(),
-                                    Size(coords.size.width.toFloat(), coords.size.height.toFloat()),
-                                ),
-                            )
-                        }
-                    },
+                    .padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(TileSpacing),
                 verticalArrangement = Arrangement.spacedBy(TileSpacing),
             ) {
