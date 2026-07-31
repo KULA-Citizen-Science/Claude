@@ -8,15 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -36,10 +34,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,21 +50,19 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
     val keyboard = LocalSoftwareKeyboardController.current
 
     Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.app_name)) })
-        },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
+            Spacer(Modifier.height(8.dp))
+
             // Input + load
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = viewModel.input,
                     onValueChange = viewModel::onInputChange,
@@ -100,23 +96,24 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
 
             Spacer(Modifier.height(16.dp))
 
-            if (viewModel.tiles.isEmpty()) {
+            if (!viewModel.hasBoard) {
                 EmptyBoard()
             } else {
                 CurrentWordHeader(
                     word = viewModel.currentWord,
-                    isAnagram = viewModel.isAnagram,
+                    status = when {
+                        viewModel.isAnagram -> Status.ANAGRAM
+                        viewModel.ablage.isNotEmpty() -> Status.INCOMPLETE
+                        else -> Status.ORIGINAL
+                    },
                 )
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.board_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                LetterTilesBoard(
-                    tiles = viewModel.tiles,
-                    onMove = viewModel::moveTile,
+                WorkBoard(
+                    werkbank = viewModel.werkbank,
+                    ablage = viewModel.ablage,
+                    onDrop = viewModel::drop,
+                    onTap = viewModel::tapCell,
+                    onAddSpace = viewModel::addSpace,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
@@ -146,17 +143,16 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(8.dp))
-            SavedList(
-                items = viewModel.saved,
-                onDelete = viewModel::deleteSaved,
-                modifier = Modifier.weight(1f),
-            )
+            SavedList(items = viewModel.saved, onDelete = viewModel::deleteSaved)
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
+private enum class Status { ORIGINAL, INCOMPLETE, ANAGRAM }
+
 @Composable
-private fun CurrentWordHeader(word: String, isAnagram: Boolean) {
+private fun CurrentWordHeader(word: String, status: Status) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -165,14 +161,18 @@ private fun CurrentWordHeader(word: String, isAnagram: Boolean) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = word,
+                text = word.ifBlank { " " },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(
-                    if (isAnagram) R.string.badge_anagram else R.string.badge_original,
+                    when (status) {
+                        Status.ANAGRAM -> R.string.badge_anagram
+                        Status.INCOMPLETE -> R.string.badge_incomplete
+                        Status.ORIGINAL -> R.string.badge_original
+                    },
                 ),
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -196,26 +196,18 @@ private fun EmptyBoard() {
 }
 
 @Composable
-private fun SavedList(
-    items: List<SavedAnagram>,
-    onDelete: (SavedAnagram) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun SavedList(items: List<SavedAnagram>, onDelete: (SavedAnagram) -> Unit) {
     if (items.isEmpty()) {
         Text(
             text = stringResource(R.string.saved_empty),
-            modifier = modifier,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(items = items, key = { it.createdAt.toString() + it.text }) { item ->
-            Card(colors = CardDefaults.cardColors()) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach { item ->
+            Card {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

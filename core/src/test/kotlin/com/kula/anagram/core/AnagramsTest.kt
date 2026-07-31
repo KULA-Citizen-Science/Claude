@@ -14,31 +14,41 @@ class AnagramsTest {
             listOf('A', 'n', 'n', 'a', 'L', 'e', 'n', 'a'),
             Anagrams.extractLetters("Anna-Lena 3!"),
         )
-        assertEquals(
-            listOf('M', 'ü', 'l', 'l', 'e', 'r'),
-            Anagrams.extractLetters("Müller"),
-        )
+        assertEquals(listOf('M', 'ü', 'l', 'l', 'e', 'r'), Anagrams.extractLetters("Müller"))
         assertEquals(listOf('S', 't', 'r', 'a', 'ß', 'e'), Anagrams.extractLetters("Straße"))
     }
 
     @Test
-    fun tilesFrom_assignsUniqueSequentialIdsAndPreservesLetters() {
-        val tiles = Anagrams.tilesFrom("Anna")
-        assertEquals(listOf(0, 1, 2, 3), tiles.map { it.id })
-        assertEquals(listOf('A', 'n', 'n', 'a'), tiles.map { it.char })
-        assertEquals(tiles.size, tiles.map { it.id }.distinct().size)
+    fun letterCells_assignsUniqueSequentialIdsAndPreservesLetters() {
+        val cells = Anagrams.letterCells("Anna")
+        assertEquals(listOf(0, 1, 2, 3), cells.map { it.id })
+        assertEquals(listOf('A', 'n', 'n', 'a'), cells.map { it.char })
+        assertEquals(cells.size, cells.map { it.id }.distinct().size)
     }
 
     @Test
-    fun tilesFrom_honoursStartId() {
-        val tiles = Anagrams.tilesFrom("ab", startId = 100)
-        assertEquals(listOf(100, 101), tiles.map { it.id })
+    fun letterCells_honoursStartId() {
+        val cells = Anagrams.letterCells("ab", startId = 100)
+        assertEquals(listOf(100, 101), cells.map { it.id })
     }
 
     @Test
-    fun spell_roundTripsTheInputLetters() {
-        val tiles = Anagrams.tilesFrom("Garten")
-        assertEquals("Garten", Anagrams.spell(tiles))
+    fun spell_rendersLettersAndSpacesAndTrimsEnds() {
+        assertEquals("Garten", Anagrams.spell(Anagrams.letterCells("Garten")))
+        val cells: List<Cell> = listOf(
+            Cell.Letter(0, 'A'),
+            Cell.Space(1),
+            Cell.Letter(2, 'B'),
+        )
+        assertEquals("A B", Anagrams.spell(cells))
+        // Leading/trailing spaces are trimmed away.
+        assertEquals("AB", Anagrams.spell(listOf(Cell.Space(0), Cell.Letter(1, 'A'), Cell.Letter(2, 'B'), Cell.Space(3))))
+    }
+
+    @Test
+    fun letters_dropsSpaces() {
+        val cells: List<Cell> = listOf(Cell.Letter(0, 'A'), Cell.Space(1), Cell.Letter(2, 'b'))
+        assertEquals("Ab", Anagrams.letters(cells))
     }
 
     @Test
@@ -56,12 +66,13 @@ class AnagramsTest {
     }
 
     @Test
-    fun isProperAnagram_requiresSameLettersButDifferentOrder() {
+    fun isProperAnagram_ignoresSpacesAndCaseButRequiresDifferentOrder() {
         assertTrue(Anagrams.isProperAnagram("Garten", "tragen"))
-        // Same spelling (case/spacing aside) is not a proper anagram of itself.
-        assertFalse(Anagrams.isProperAnagram("Garten", "garten"))
+        // Splitting into words is still the same letter order -> not a new anagram.
         assertFalse(Anagrams.isProperAnagram("Garten", "Gar ten"))
-        // Different letters entirely.
+        assertFalse(Anagrams.isProperAnagram("Garten", "garten"))
+        // A real rearrangement across a word break counts.
+        assertTrue(Anagrams.isProperAnagram("Anna Lena", "Alan Enna"))
         assertFalse(Anagrams.isProperAnagram("Garten", "Haus"))
     }
 
@@ -70,7 +81,6 @@ class AnagramsTest {
         val original = listOf("a", "b", "c", "d")
         assertEquals(listOf("b", "c", "a", "d"), Anagrams.moveItem(original, 0, 2))
         assertEquals(listOf("c", "a", "b", "d"), Anagrams.moveItem(original, 2, 0))
-        // untouched original
         assertEquals(listOf("a", "b", "c", "d"), original)
     }
 
@@ -83,27 +93,27 @@ class AnagramsTest {
     }
 
     @Test
-    fun shuffled_preservesTheMultisetOfLetters() {
-        val tiles = Anagrams.tilesFrom("Buchstaben")
-        val result = Anagrams.shuffled(tiles, Random(42))
+    fun shuffled_preservesTheMultisetOfCells() {
+        val cells = Anagrams.letterCells("Buchstaben")
+        val result = Anagrams.shuffled(cells, Random(42))
         assertEquals(Anagrams.signature("Buchstaben"), Anagrams.signature(Anagrams.spell(result)))
-        assertEquals(tiles.map { it.id }.toSet(), result.map { it.id }.toSet())
+        assertEquals(cells.map { it.id }.toSet(), result.map { it.id }.toSet())
     }
 
     @Test
     fun shuffled_isDeterministicForAGivenSeed() {
-        val tiles = Anagrams.tilesFrom("Buchstaben")
-        val a = Anagrams.shuffled(tiles, Random(7))
-        val b = Anagrams.shuffled(tiles, Random(7))
-        assertEquals(Anagrams.spell(a), Anagrams.spell(b))
+        val cells = Anagrams.letterCells("Buchstaben")
+        assertEquals(
+            Anagrams.spell(Anagrams.shuffled(cells, Random(7))),
+            Anagrams.spell(Anagrams.shuffled(cells, Random(7))),
+        )
     }
 
     @Test
     fun shuffled_avoidsReturningTheSameOrderWhenPossible() {
-        val tiles = Anagrams.tilesFrom("Garten")
-        // A seed whose first shuffle would reproduce the input still yields a different order.
+        val cells = Anagrams.letterCells("Garten")
         repeat(25) { seed ->
-            val result = Anagrams.shuffled(tiles, Random(seed.toLong()), avoid = tiles)
+            val result = Anagrams.shuffled(cells, Random(seed.toLong()), avoid = cells)
             assertFalse(
                 "shuffle with seed $seed returned the original order",
                 Anagrams.spell(result) == "Garten",
@@ -113,9 +123,9 @@ class AnagramsTest {
 
     @Test
     fun shuffled_returnsInputWhenNoDistinctArrangementExists() {
-        val single = Anagrams.tilesFrom("a")
+        val single = Anagrams.letterCells("a")
         assertEquals(single, Anagrams.shuffled(single, Random(1)))
-        val allSame = Anagrams.tilesFrom("aaa")
+        val allSame = Anagrams.letterCells("aaa")
         assertEquals("aaa", Anagrams.spell(Anagrams.shuffled(allSame, Random(1))))
     }
 }
