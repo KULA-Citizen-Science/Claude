@@ -101,6 +101,8 @@ fun WorkBoard(
     var rootWindowPos by remember { mutableStateOf(Offset.Zero) }
     var draggingId by remember { mutableStateOf<Int?>(null) }
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
+    // Temporary on-screen diagnostics so drag behaviour can be inspected on a real device.
+    var debug by remember { mutableStateOf("bereit") }
 
     fun cellsOf(zone: Zone): List<Cell> =
         if (zone == Zone.WERKBANK) werkbankState.value else ablageState.value
@@ -137,14 +139,20 @@ fun WorkBoard(
 
     // Called once, when the finger lifts: place the dragged cell where it was released.
     fun finishDrag(id: Int) {
+        val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
-        if (target != null && currentPosition(id) != target) {
+        debug = "drop id=$id cur=$cur tgt=$target zonen=${zoneRects.size} kacheln=${centers.size}"
+        if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
         draggingId = null
     }
 
-    val startDrag: (Int) -> Unit = { id -> draggingId = id; floatCenter = centers[id] ?: Offset.Zero }
+    val startDrag: (Int) -> Unit = { id ->
+        draggingId = id
+        floatCenter = centers[id] ?: Offset.Zero
+        debug = "ziehe id=$id  finger=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
+    }
     val dragBy: (Offset) -> Unit = { delta -> floatCenter += delta }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
@@ -178,6 +186,11 @@ fun WorkBoard(
                 onDrag = dragBy,
                 onDragEnd = { id -> finishDrag(id) },
                 trailing = null,
+            )
+            Text(
+                text = "🐞 $debug",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
 

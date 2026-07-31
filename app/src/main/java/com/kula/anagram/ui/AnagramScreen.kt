@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,7 +56,6 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
             Spacer(Modifier.height(8.dp))
@@ -143,8 +142,11 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(8.dp))
-            SavedList(items = viewModel.saved, onDelete = viewModel::deleteSaved)
-            Spacer(Modifier.height(24.dp))
+            SavedList(
+                items = viewModel.saved,
+                onDelete = viewModel::deleteSaved,
+                modifier = Modifier.weight(1f, fill = false),
+            )
         }
     }
 }
@@ -196,17 +198,26 @@ private fun EmptyBoard() {
 }
 
 @Composable
-private fun SavedList(items: List<SavedAnagram>, onDelete: (SavedAnagram) -> Unit) {
+private fun SavedList(
+    items: List<SavedAnagram>,
+    onDelete: (SavedAnagram) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     if (items.isEmpty()) {
         Text(
             text = stringResource(R.string.saved_empty),
+            modifier = modifier,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.forEach { item ->
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+    ) {
+        items(items = items, key = { it.createdAt.toString() + it.text }) { item ->
             Card {
                 Row(
                     modifier = Modifier
