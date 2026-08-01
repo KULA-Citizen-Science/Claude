@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
@@ -101,6 +102,10 @@ fun WorkBoard(
     // Temporary on-screen diagnostics so drag behaviour can be inspected on a real device.
     var debug by remember { mutableStateOf("bereit") }
 
+    // Drop measurements for cells that no longer exist, so a stale entry can never be consulted.
+    val liveIds = remember(werkbank, ablage) { (werkbank.map { it.id } + ablage.map { it.id }).toSet() }
+    LaunchedEffect(liveIds) { centers.keys.retainAll(liveIds) }
+
     fun cellsOf(zone: Zone): List<Cell> =
         if (zone == Zone.WERKBANK) werkbankState.value else ablageState.value
 
@@ -113,69 +118,57 @@ fun WorkBoard(
     // Where would the dragged cell drop, given the finger position? Returns the target board and the
     // insertion index into that board's list (with the dragged cell removed).
     //
-    // This deliberately uses *only* the measured cell centres — verified correct against a screen
-    // recording — and never the zone rectangles, which were observed to be stale for the workbench and
-    // made every in-board drop resolve to "no target". An empty board is reached by checking whether
-    // the finger sits clearly beyond the occupied board's cells, the workbench always being above the
-    // tray. As a result a drop resolves to a real slot whenever any other cell exists.
+    // This uses *only* the measured cell centres — verified correct against a screen recording — and
+    // never zone rectangles, which were observed to be stale for the workbench and made every in-board
+    // drop resolve to "no target".
+    //
+    // The board is chosen purely by height: everything above the horizontal boundary between the two
+    // rows of cells belongs to the workbench, everything below to the tray. Only then does the
+    // horizontal position pick the slot within that board. Deciding by "nearest cell across both
+    // boards" instead made a lone tray letter act as a magnet that swallowed workbench drops.
     fun targetFor(id: Int, finger: Offset): Pair<Zone, Int>? {
         val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
         val werkCells = werkbankState.value.filter { it.id != id }
-        val trayCells = if (isSpace) emptyList() else ablageState.value.filter { it.id != id }
-        val threshold = with(density) { TileSize.toPx() }
+        val trayCells = ablageState.value.filter { it.id != id }
+        val tile = with(density) { TileSize.toPx() }
 
-        fun nearestIn(zone: Zone, cells: List<Cell>): Pair<Zone, Int>? {
-            var bestIndex = -1
-            var bestDistance = Float.MAX_VALUE
-            var bestAfter = false
-            cells.forEachIndexed { index, cell ->
-                val c = centers[cell.id] ?: return@forEachIndexed
-                val d = (c - finger).getDistanceSquared()
-                if (d < bestDistance) {
-                    bestDistance = d
-                    bestIndex = index
-                    bestAfter = finger.x > c.x
-                }
+        val lowestWerkbank = werkCells.mapNotNull { centers[it.id]?.y }.maxOrNull()
+        val highestTray = trayCells.mapNotNull { centers[it.id]?.y }.minOrNull()
+
+        // Horizontal line separating the two boards. With only one board occupied, the empty one still
+        // needs to be reachable, so the boundary sits a deliberate distance beyond the occupied cells.
+        val boundary = when {
+            lowestWerkbank != null && highestTray != null -> (lowestWerkbank + highestTray) / 2f
+            lowestWerkbank != null -> lowestWerkbank + 1.5f * tile
+            highestTray != null -> highestTray - 1.5f * tile
+            else -> return null
+        }
+
+        // Spaces belong to the workbench and never travel to the tray.
+        val zone = if (isSpace || finger.y <= boundary) Zone.WERKBANK else Zone.ABLAGE
+        val cells = if (zone == Zone.WERKBANK) werkCells else trayCells
+        if (cells.isEmpty()) return zone to 0
+
+        var bestIndex = 0
+        var bestDistance = Float.MAX_VALUE
+        var bestAfter = false
+        cells.forEachIndexed { index, cell ->
+            val c = centers[cell.id] ?: return@forEachIndexed
+            val d = (c - finger).getDistanceSquared()
+            if (d < bestDistance) {
+                bestDistance = d
+                bestIndex = index
+                bestAfter = finger.x > c.x
             }
-            return if (bestIndex < 0) null else zone to (bestIndex + if (bestAfter) 1 else 0)
         }
-
-        // Only the tray holds cells: allow reaching the empty workbench by dropping above them.
-        if (werkCells.isEmpty()) {
-            val topOfTray = trayCells.mapNotNull { centers[it.id]?.y }.minOrNull() ?: return Zone.WERKBANK to 0
-            if (finger.y < topOfTray - threshold) return Zone.WERKBANK to 0
-            return nearestIn(Zone.ABLAGE, trayCells) ?: (Zone.WERKBANK to 0)
-        }
-
-        // Only the workbench holds cells: allow reaching the empty tray by dropping below them.
-        if (trayCells.isEmpty()) {
-            if (!isSpace) {
-                val bottomOfWerkbank = werkCells.mapNotNull { centers[it.id]?.y }.maxOrNull()
-                if (bottomOfWerkbank != null && finger.y > bottomOfWerkbank + threshold) {
-                    return Zone.ABLAGE to 0
-                }
-            }
-            return nearestIn(Zone.WERKBANK, werkCells)
-        }
-
-        // Both boards hold cells: whichever cell is closest wins.
-        val a = nearestIn(Zone.WERKBANK, werkCells)
-        val b = nearestIn(Zone.ABLAGE, trayCells)
-        val da = werkCells.mapNotNull { centers[it.id] }.minOfOrNull { (it - finger).getDistanceSquared() }
-        val db = trayCells.mapNotNull { centers[it.id] }.minOfOrNull { (it - finger).getDistanceSquared() }
-        return when {
-            da == null -> b
-            db == null -> a
-            da <= db -> a
-            else -> b
-        }
+        return zone to (bestIndex + if (bestAfter) 1 else 0)
     }
 
     // Called once, when the finger lifts: place the dragged cell where it was released.
     fun finishDrag(id: Int) {
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
-        debug = "B8 drop id=$id f=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
+        debug = "B9 drop id=$id f=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
             "cur=$cur tgt=$target kacheln=${centers.size}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
@@ -186,7 +179,7 @@ fun WorkBoard(
     val startDrag: (Int) -> Unit = { id ->
         draggingId = id
         floatCenter = centers[id] ?: Offset.Zero
-        debug = "B8 ziehe id=$id start=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
+        debug = "B9 ziehe id=$id start=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
     }
     val dragBy: (Offset) -> Unit = { delta -> floatCenter += delta }
 

@@ -66,13 +66,14 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
     /** True once a term has been loaded onto the boards. */
     val hasBoard: Boolean get() = werkbank.isNotEmpty() || ablage.isNotEmpty()
 
+    /** Input is kept upper-case throughout: the board shows capitals only. */
     fun onInputChange(value: String) {
-        input = value
+        input = value.uppercase()
     }
 
     /** Turns the current [input] into letter cells, all placed on the workbench. */
     fun loadLetters() {
-        val trimmed = input.trim()
+        val trimmed = input.trim().uppercase()
         source = trimmed
         val cells = Anagrams.letterCells(trimmed)
         nextId = cells.size
