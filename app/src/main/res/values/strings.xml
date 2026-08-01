@@ -14,6 +14,7 @@
     <string name="zone_werkbank_hint">Ziehen zum Umsortieren · Tippen legt den Buchstaben ab</string>
     <string name="zone_ablage">Ablageboard</string>
     <string name="zone_ablage_hint">Beiseitegelegte Buchstaben · Tippen holt sie zurück</string>
+    <string name="space_hint">Leerzeichen lassen sich verschieben · zum Löschen ins Ablageboard ziehen</string>
     <string name="badge_incomplete">Unvollständig – es liegen noch Buchstaben im Ablageboard</string>
     <string name="empty_hint">Gib oben einen Begriff oder Namen ein und tippe auf „Buchstaben laden“.</string>
     <string name="saved_title">Meine Anagramme</string>

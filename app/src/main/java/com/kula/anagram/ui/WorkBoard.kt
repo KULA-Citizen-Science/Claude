@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
@@ -69,13 +68,13 @@ private val ZoneMinHeight = 72.dp
  * The interactive two-board area: a **Werkbank** (workbench) where the anagram is assembled and an
  * **Ablageboard** (tray) where letters can be parked. Drag a cell to lift it — it floats under the
  * finger — and release it where it should go: within a board to reorder, or over the other board to
- * move it there. Tapping a letter sends it to the other board; tapping a space removes it.
- * "+ Leerzeichen" adds a space to the workbench.
+ * move it there. Tapping a letter sends it to the other board. Spaces live on the workbench only;
+ * dragging one onto the tray deletes it, and tapping one does nothing so it cannot be lost by accident.
  *
- * Hit-testing works in window coordinates ([positionInWindow]) so cell centres, zone rectangles and
- * the dragged finger all live in one space regardless of layout ordering. The current board contents
- * are read through [rememberUpdatedState] because a `pointerInput` block, once started, is never
- * restarted for a stable key and would otherwise capture a stale, first-frame copy of the lists.
+ * Geometry is measured in window coordinates ([positionInWindow]) so cell centres and the dragged
+ * finger share one space regardless of layout ordering. The dragged position is recomputed absolutely
+ * on every pointer event — cell centre plus the pointer's travel inside its own cell — rather than by
+ * summing per-frame deltas, which cannot drift out of step with the layout.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -99,6 +98,8 @@ fun WorkBoard(
     var rootWindowPos by remember { mutableStateOf(Offset.Zero) }
     var draggingId by remember { mutableStateOf<Int?>(null) }
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
+    // Where inside its own cell the finger first landed, so the tile keeps the grab point under it.
+    var grabPoint by remember { mutableStateOf(Offset.Zero) }
     // Temporary on-screen diagnostics so drag behaviour can be inspected on a real device.
     var debug by remember { mutableStateOf("bereit") }
 
@@ -106,28 +107,24 @@ fun WorkBoard(
     val liveIds = remember(werkbank, ablage) { (werkbank.map { it.id } + ablage.map { it.id }).toSet() }
     LaunchedEffect(liveIds) { centers.keys.retainAll(liveIds) }
 
-    fun cellsOf(zone: Zone): List<Cell> =
-        if (zone == Zone.WERKBANK) werkbankState.value else ablageState.value
-
     fun currentPosition(id: Int): Pair<Zone, Int>? {
         werkbankState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.WERKBANK to it }
         ablageState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.ABLAGE to it }
         return null
     }
 
-    // Where would the dragged cell drop, given the finger position? Returns the target board and the
-    // insertion index into that board's list (with the dragged cell removed).
+    // Where would the dragged cell drop, given the position of the floating tile? Returns the target
+    // board and the insertion index into that board's list (with the dragged cell removed).
     //
     // This uses *only* the measured cell centres — verified correct against a screen recording — and
     // never zone rectangles, which were observed to be stale for the workbench and made every in-board
     // drop resolve to "no target".
     //
-    // The board is chosen purely by height: everything above the horizontal boundary between the two
-    // rows of cells belongs to the workbench, everything below to the tray. Only then does the
-    // horizontal position pick the slot within that board. Deciding by "nearest cell across both
-    // boards" instead made a lone tray letter act as a magnet that swallowed workbench drops.
-    fun targetFor(id: Int, finger: Offset): Pair<Zone, Int>? {
-        val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
+    // The board is chosen purely by height: above the boundary between the two rows of cells is the
+    // workbench, below it the tray. Only then does the horizontal position pick the slot within that
+    // board. Deciding by "nearest cell across both boards" instead made a lone tray letter act as a
+    // magnet that swallowed workbench drops.
+    fun targetFor(id: Int, point: Offset): Pair<Zone, Int>? {
         val werkCells = werkbankState.value.filter { it.id != id }
         val trayCells = ablageState.value.filter { it.id != id }
         val tile = with(density) { TileSize.toPx() }
@@ -144,8 +141,7 @@ fun WorkBoard(
             else -> return null
         }
 
-        // Spaces belong to the workbench and never travel to the tray.
-        val zone = if (isSpace || finger.y <= boundary) Zone.WERKBANK else Zone.ABLAGE
+        val zone = if (point.y <= boundary) Zone.WERKBANK else Zone.ABLAGE
         val cells = if (zone == Zone.WERKBANK) werkCells else trayCells
         if (cells.isEmpty()) return zone to 0
 
@@ -154,11 +150,11 @@ fun WorkBoard(
         var bestAfter = false
         cells.forEachIndexed { index, cell ->
             val c = centers[cell.id] ?: return@forEachIndexed
-            val d = (c - finger).getDistanceSquared()
+            val d = (c - point).getDistanceSquared()
             if (d < bestDistance) {
                 bestDistance = d
                 bestIndex = index
-                bestAfter = finger.x > c.x
+                bestAfter = point.x > c.x
             }
         }
         return zone to (bestIndex + if (bestAfter) 1 else 0)
@@ -168,7 +164,8 @@ fun WorkBoard(
     fun finishDrag(id: Int) {
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
-        debug = "B9 drop id=$id f=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
+        val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
+        debug = "B10 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
             "cur=$cur tgt=$target kacheln=${centers.size}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
@@ -176,12 +173,23 @@ fun WorkBoard(
         draggingId = null
     }
 
-    val startDrag: (Int) -> Unit = { id ->
-        draggingId = id
-        floatCenter = centers[id] ?: Offset.Zero
-        debug = "B9 ziehe id=$id start=${floatCenter.x.toInt()},${floatCenter.y.toInt()}"
+    val startDrag: (Int, Offset) -> Unit = { id, local ->
+        val center = centers[id]
+        if (center != null) {
+            draggingId = id
+            grabPoint = local
+            floatCenter = center
+            debug = "B10 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
+        } else {
+            debug = "B10 ziehe id=$id ABBRUCH: keine Position gemessen"
+        }
     }
-    val dragBy: (Offset) -> Unit = { delta -> floatCenter += delta }
+
+    // Absolute, drift-free: the tile's centre is its home centre plus how far the finger has travelled
+    // inside the cell it was grabbed in.
+    val dragTo: (Int, Offset) -> Unit = { id, local ->
+        centers[id]?.let { floatCenter = it + (local - grabPoint) }
+    }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -193,7 +201,7 @@ fun WorkBoard(
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onDragStart = startDrag,
-                onDrag = dragBy,
+                onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
                 trailing = {
                     OutlinedButton(onClick = onAddSpace) {
@@ -201,6 +209,13 @@ fun WorkBoard(
                     }
                 },
             )
+            if (werkbank.any { it is Cell.Space }) {
+                Text(
+                    text = stringResource(R.string.space_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             ZoneSection(
                 title = stringResource(R.string.zone_ablage),
                 subtitle = stringResource(R.string.zone_ablage_hint),
@@ -209,7 +224,7 @@ fun WorkBoard(
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onDragStart = startDrag,
-                onDrag = dragBy,
+                onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
                 trailing = null,
             )
@@ -251,8 +266,8 @@ private fun ZoneSection(
     draggingId: Int?,
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
-    onDragStart: (Int) -> Unit,
-    onDrag: (Offset) -> Unit,
+    onDragStart: (Int, Offset) -> Unit,
+    onDragTo: (Int, Offset) -> Unit,
     onDragEnd: (Int) -> Unit,
     trailing: (@Composable () -> Unit)?,
 ) {
@@ -300,9 +315,9 @@ private fun ZoneSection(
                                         )
                                     }
                                 }
-                                // One combined gesture handler: a quick press without movement is a
-                                // tap; crossing the touch slop starts a drag. Kept in a single
-                                // pointerInput so the tap detector can't swallow the drag's down event.
+                                // One combined gesture handler: a press that never crosses the touch
+                                // slop is a tap, anything beyond it is a drag. Both live in a single
+                                // pointerInput so a tap detector cannot swallow the drag's down event.
                                 .pointerInput(cell.id) {
                                     val touchSlop = viewConfiguration.touchSlop
                                     awaitEachGesture {
@@ -318,11 +333,12 @@ private fun ZoneSection(
                                             if (!dragging) {
                                                 if ((change.position - down.position).getDistance() > touchSlop) {
                                                     dragging = true
-                                                    onDragStart(cell.id)
+                                                    onDragStart(cell.id, down.position)
+                                                    onDragTo(cell.id, change.position)
                                                     change.consume()
                                                 }
                                             } else {
-                                                onDrag(change.positionChange())
+                                                onDragTo(cell.id, change.position)
                                                 change.consume()
                                             }
                                         }

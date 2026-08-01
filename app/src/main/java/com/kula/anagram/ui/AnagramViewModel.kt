@@ -88,12 +88,17 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Moves the cell with [cellId] to [zone] at [index], wherever it currently sits. Spaces may only
-     * land on the workbench; a request to drop one on the tray is ignored.
+     * Moves the cell with [cellId] to [zone] at [index], wherever it currently sits. Spaces belong to
+     * the workbench, so dragging one onto the tray deletes it instead — that is how a space is removed.
      */
     fun drop(cellId: Int, zone: Zone, index: Int) {
         val cell = findCell(cellId) ?: return
-        if (cell is Cell.Space && zone == Zone.ABLAGE) return
+        if (cell is Cell.Space) {
+            if (zone == Zone.ABLAGE) {
+                werkbank = werkbank.filterNot { it.id == cellId }
+                return
+            }
+        }
 
         val newWerkbank = werkbank.filterNot { it.id == cellId }.toMutableList()
         val newAblage = ablage.filterNot { it.id == cellId }.toMutableList()
@@ -106,14 +111,16 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Quick action on tap: a workbench letter goes to the end of the tray, a tray letter to the end
-     * of the workbench, and a space is simply removed.
+     * Quick action on tap: a workbench letter goes to the end of the tray and a tray letter to the end
+     * of the workbench. Tapping a space does nothing — an accidental tap must never destroy a word
+     * break the user placed; spaces are removed by dragging them onto the tray.
      */
     fun tapCell(cellId: Int) {
         val onWerkbank = werkbank.firstOrNull { it.id == cellId }
         if (onWerkbank != null) {
+            if (onWerkbank !is Cell.Letter) return
             werkbank = werkbank.filterNot { it.id == cellId }
-            if (onWerkbank is Cell.Letter) ablage = ablage + onWerkbank
+            ablage = ablage + onWerkbank
             return
         }
         val onAblage = ablage.firstOrNull { it.id == cellId }
