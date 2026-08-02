@@ -71,19 +71,19 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         input = value.uppercase()
     }
 
-    /** Turns the current [input] into letter cells, all placed on the workbench. */
+    /** Turns the current [input] into letter cells, all placed in the tray for the user to draw from. */
     fun loadLetters() {
         val trimmed = input.trim().uppercase()
         source = trimmed
         val cells = Anagrams.letterCells(trimmed)
         nextId = cells.size
-        werkbank = cells
-        ablage = emptyList()
+        werkbank = emptyList()
+        ablage = cells
     }
 
     /** Appends a space to the end of the workbench. */
     fun addSpace() {
-        if (werkbank.isEmpty()) return
+        if (source.isBlank()) return
         werkbank = werkbank + Cell.Space(nextId++)
     }
 
@@ -135,12 +135,12 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         werkbank = Anagrams.shuffled(werkbank, avoid = werkbank)
     }
 
-    /** Restores every letter to the workbench in the loaded term's order, clearing tray and spaces. */
+    /** Returns every letter to the tray in the loaded term's order, clearing the workbench and spaces. */
     fun reset() {
         val cells = Anagrams.letterCells(source)
         nextId = cells.size
-        werkbank = cells
-        ablage = emptyList()
+        werkbank = emptyList()
+        ablage = cells
     }
 
     /** Empties both boards and the input field. */

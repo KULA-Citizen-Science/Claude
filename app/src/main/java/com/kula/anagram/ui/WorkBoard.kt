@@ -120,28 +120,29 @@ fun WorkBoard(
     // never zone rectangles, which were observed to be stale for the workbench and made every in-board
     // drop resolve to "no target".
     //
-    // The board is chosen purely by height: above the boundary between the two rows of cells is the
-    // workbench, below it the tray. Only then does the horizontal position pick the slot within that
-    // board. Deciding by "nearest cell across both boards" instead made a lone tray letter act as a
-    // magnet that swallowed workbench drops.
+    // The board is chosen purely by height: the tray sits on top as the supply of letters, the
+    // workbench below it as the assembly area, so everything above the boundary between the two rows
+    // of cells is the tray and everything below is the workbench. Only then does the horizontal
+    // position pick the slot within that board. Deciding by "nearest cell across both boards" instead
+    // made a lone letter on the other board act as a magnet that swallowed drops.
     fun targetFor(id: Int, point: Offset): Pair<Zone, Int>? {
         val werkCells = werkbankState.value.filter { it.id != id }
         val trayCells = ablageState.value.filter { it.id != id }
         val tile = with(density) { TileSize.toPx() }
 
-        val lowestWerkbank = werkCells.mapNotNull { centers[it.id]?.y }.maxOrNull()
-        val highestTray = trayCells.mapNotNull { centers[it.id]?.y }.minOrNull()
+        val lowestTray = trayCells.mapNotNull { centers[it.id]?.y }.maxOrNull()
+        val highestWerkbank = werkCells.mapNotNull { centers[it.id]?.y }.minOrNull()
 
         // Horizontal line separating the two boards. With only one board occupied, the empty one still
         // needs to be reachable, so the boundary sits a deliberate distance beyond the occupied cells.
         val boundary = when {
-            lowestWerkbank != null && highestTray != null -> (lowestWerkbank + highestTray) / 2f
-            lowestWerkbank != null -> lowestWerkbank + 1.5f * tile
-            highestTray != null -> highestTray - 1.5f * tile
+            lowestTray != null && highestWerkbank != null -> (lowestTray + highestWerkbank) / 2f
+            lowestTray != null -> lowestTray + 1.5f * tile
+            highestWerkbank != null -> highestWerkbank - 1.5f * tile
             else -> return null
         }
 
-        val zone = if (point.y <= boundary) Zone.WERKBANK else Zone.ABLAGE
+        val zone = if (point.y <= boundary) Zone.ABLAGE else Zone.WERKBANK
         val cells = if (zone == Zone.WERKBANK) werkCells else trayCells
         if (cells.isEmpty()) return zone to 0
 
@@ -165,7 +166,7 @@ fun WorkBoard(
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
         val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B10 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
+        debug = "B11 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
             "cur=$cur tgt=$target kacheln=${centers.size}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
@@ -179,9 +180,9 @@ fun WorkBoard(
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B10 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
+            debug = "B11 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
         } else {
-            debug = "B10 ziehe id=$id ABBRUCH: keine Position gemessen"
+            debug = "B11 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
@@ -192,7 +193,20 @@ fun WorkBoard(
     }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
+        // Tray on top as the supply of letters, workbench below it as the assembly area.
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ZoneSection(
+                title = stringResource(R.string.zone_ablage),
+                subtitle = stringResource(R.string.zone_ablage_hint),
+                cells = ablage,
+                draggingId = draggingId,
+                onCellCenter = { id, c -> centers[id] = c },
+                onTap = onTap,
+                onDragStart = startDrag,
+                onDragTo = dragTo,
+                onDragEnd = { id -> finishDrag(id) },
+                trailing = null,
+            )
             ZoneSection(
                 title = stringResource(R.string.zone_werkbank),
                 subtitle = stringResource(R.string.zone_werkbank_hint),
@@ -216,18 +230,6 @@ fun WorkBoard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ZoneSection(
-                title = stringResource(R.string.zone_ablage),
-                subtitle = stringResource(R.string.zone_ablage_hint),
-                cells = ablage,
-                draggingId = draggingId,
-                onCellCenter = { id, c -> centers[id] = c },
-                onTap = onTap,
-                onDragStart = startDrag,
-                onDragTo = dragTo,
-                onDragEnd = { id -> finishDrag(id) },
-                trailing = null,
-            )
             Text(
                 text = "🐞 $debug",
                 style = MaterialTheme.typography.labelSmall,
