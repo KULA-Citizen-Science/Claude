@@ -14,9 +14,12 @@ Anagramme werden lokal unter „Meine Anagramme“ gespeichert.
   ins Ablageboard gelegt (Leerzeichen, Ziffern und Satzzeichen werden ignoriert, Umlaute und ß bleiben
   erhalten). Die Anzeige erfolgt durchgehend in Großbuchstaben.
 - **Ablageboard (oben) & Werkbank (unten)** – eine Kachel lässt sich per Drag innerhalb eines Bereichs
-  umsortieren **oder** in den anderen Bereich ziehen. Während des Ziehens schwebt sie unter dem Finger,
-  ihr Ausgangsplatz bleibt blass sichtbar, und beim Loslassen rastet sie an der nächstgelegenen Stelle
-  ein. **Tippen** auf einen Buchstaben schickt ihn schnell in den jeweils anderen Bereich.
+  umsortieren **oder** in den anderen Bereich ziehen. **Tippen** auf einen Buchstaben schickt ihn
+  schnell in den jeweils anderen Bereich.
+- **Sichtbare Rückmeldung beim Ziehen** – die gehaltene Kachel schwebt vergrößert und farblich
+  hervorgehoben unter dem Finger, ihr verlassener Platz bleibt als umrandete Lücke stehen, das Brett
+  unter dem Finger wird eingefärbt, und ein senkrechter Strich zeigt genau die Lücke an, in die der
+  Buchstabe beim Loslassen einrastet.
 - **Leerzeichen einfügen** – „+ Leerzeichen“ setzt auf der Werkbank ein Trennzeichen, das sich dort
   **genau wie ein Buchstabe** verschieben lässt. Es kann die Werkbank nicht verlassen und geht daher
   beim Ziehen nie verloren; ein Tipp darauf bewirkt bewusst nichts, und **langes Drücken** entfernt
@@ -77,8 +80,9 @@ Die eigentliche Drag-Interaktion braucht einen Touchscreen und lässt sich nur v
       Eingabe erzeugen keine Kachel, und alle Kacheln zeigen Großbuchstaben.
 - [ ] Eine Kachel aus dem Ablageboard auf die Werkbank ziehen (und zurück) — der Übergang zwischen den
       beiden Bereichen funktioniert. Ein Tipp auf einen Buchstaben schickt ihn in den anderen Bereich.
-- [ ] Eine Kachel innerhalb der Werkbank ziehen; die übrigen Buchstaben rücken zur Seite, beim
-      Loslassen sitzt der Buchstabe an der neuen Position, und das Wort oben aktualisiert sich.
+- [ ] Eine Kachel innerhalb der Werkbank ziehen: Während des Ziehens zeigt ein senkrechter Strich die
+      Ziellücke an und wandert mit; beim Loslassen sitzt der Buchstabe genau dort, und das Wort oben
+      aktualisiert sich entsprechend.
 - [ ] „+ Leerzeichen“ tippen — auf der Werkbank erscheint ein Trennzeichen; es lässt sich genau wie ein
       Buchstabe an jede Stelle der Werkbank ziehen, ein Tipp darauf bewirkt nichts, und langes Drücken
       entfernt es. Ergebnis z. B. „ALAN ENNA“.

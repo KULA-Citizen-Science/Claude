@@ -1,6 +1,7 @@
 package com.kula.anagram.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +92,9 @@ fun WorkBoard(
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
     // Where inside its own cell the finger first landed, so the tile keeps the grab point under it.
     var grabPoint by remember { mutableStateOf(Offset.Zero) }
+    // Where the held cell would land right now, recomputed on every pointer move so the board can show
+    // it before the finger lifts.
+    var dropTarget by remember { mutableStateOf<Pair<Zone, Int>?>(null) }
     // Drop measurements for cells that no longer exist, so a stale entry can never be consulted.
     val liveIds = remember(werkbank, ablage) { (werkbank.map { it.id } + ablage.map { it.id }).toSet() }
     LaunchedEffect(liveIds) { centers.keys.retainAll(liveIds) }
@@ -171,6 +175,7 @@ fun WorkBoard(
             onDrop(id, target.first, target.second)
         }
         draggingId = null
+        dropTarget = null
     }
 
     // The cell hands in its own measured centre, so arming a drag never depends on the shared table of
@@ -182,13 +187,35 @@ fun WorkBoard(
             draggingId = id
             grabPoint = local
             floatCenter = center
+            dropTarget = null
         }
     }
 
     // Absolute, drift-free: the tile's centre is its home centre plus how far the finger has travelled
     // inside the cell it was grabbed in.
     val dragTo: (Int, Offset, Offset?) -> Unit = { id, local, own ->
-        (own ?: centers[id])?.let { floatCenter = it + (local - grabPoint) }
+        (own ?: centers[id])?.let {
+            floatCenter = it + (local - grabPoint)
+            dropTarget = targetFor(id, floatCenter)
+        }
+    }
+
+    // Window-space centre of the insertion caret: the gap the held cell would drop into. Derived from
+    // the measured neighbours, and drawn as an overlay rather than inserted into the row — inserting it
+    // would shift the very cells the target is computed from, and the caret would chase itself.
+    fun caretCentre(): Offset? {
+        val target = dropTarget ?: return null
+        val held = draggingId ?: return null
+        val all = if (target.first == Zone.WERKBANK) werkbankState.value else ablageState.value
+        val others = all.filter { it.id != held }
+        if (others.isEmpty()) return null
+        val gapPx = with(density) { (TileSize + TileSpacing).toPx() } / 2f
+        val index = target.second.coerceIn(0, others.size)
+        return if (index < others.size) {
+            centers[others[index].id]?.let { Offset(it.x - gapPx, it.y) }
+        } else {
+            centers[others.last().id]?.let { Offset(it.x + gapPx, it.y) }
+        }
     }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
@@ -199,6 +226,7 @@ fun WorkBoard(
                 subtitle = stringResource(R.string.zone_ablage_hint),
                 cells = ablage,
                 draggingId = draggingId,
+                isDropTarget = dropTarget?.first == Zone.ABLAGE,
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onLongPress = onLongPress,
@@ -212,6 +240,7 @@ fun WorkBoard(
                 subtitle = stringResource(R.string.zone_werkbank_hint),
                 cells = werkbank,
                 draggingId = draggingId,
+                isDropTarget = dropTarget?.first == Zone.WERKBANK,
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
                 onLongPress = onLongPress,
@@ -231,6 +260,24 @@ fun WorkBoard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+
+        // The insertion caret, drawn on top of the row it points into.
+        val caret = caretCentre()
+        if (caret != null) {
+            val caretWidth = 5.dp
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            (caret.x - rootWindowPos.x - with(density) { caretWidth.toPx() } / 2f).roundToInt(),
+                            (caret.y - rootWindowPos.y - halfTilePx).roundToInt(),
+                        )
+                    }
+                    .size(width = caretWidth, height = TileSize)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
         }
 
         // The floating copy of the cell being dragged, pinned under the finger and drawn on top.
@@ -262,6 +309,7 @@ private fun ZoneSection(
     subtitle: String,
     cells: List<Cell>,
     draggingId: Int?,
+    isDropTarget: Boolean,
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
     onLongPress: (Int) -> Unit,
@@ -288,7 +336,11 @@ private fun ZoneSection(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = if (isDropTarget) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
         ) {
             FlowRow(
                 modifier = Modifier
@@ -378,17 +430,31 @@ private fun CellView(
     Surface(
         modifier = modifier
             .size(TileSize)
-            .then(if (lifted) Modifier.graphicsLayer(scaleX = 1.1f, scaleY = 1.1f) else Modifier)
-            .alpha(if (placeholder) 0.25f else 1f),
+            .then(if (lifted) Modifier.graphicsLayer(scaleX = 1.22f, scaleY = 1.22f) else Modifier)
+            .alpha(if (placeholder) 0.5f else 1f)
+            .then(
+                if (placeholder) {
+                    Modifier.border(2.dp, colors.outline, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier
+                },
+            ),
         shape = RoundedCornerShape(12.dp),
         color = when {
             placeholder -> colors.surface
+            lifted && isSpace -> colors.tertiary
+            lifted -> colors.primary
             isSpace -> colors.tertiaryContainer
             else -> colors.primaryContainer
         },
-        contentColor = if (isSpace) colors.onTertiaryContainer else colors.onPrimaryContainer,
-        tonalElevation = if (lifted) 8.dp else 2.dp,
-        shadowElevation = if (lifted) 8.dp else 0.dp,
+        contentColor = when {
+            lifted && isSpace -> colors.onTertiary
+            lifted -> colors.onPrimary
+            isSpace -> colors.onTertiaryContainer
+            else -> colors.onPrimaryContainer
+        },
+        tonalElevation = if (lifted) 12.dp else 2.dp,
+        shadowElevation = if (lifted) 12.dp else 0.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (!placeholder) {
