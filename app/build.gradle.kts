@@ -12,8 +12,8 @@ android {
         applicationId = "com.kula.anagram"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.0-B12"
+        versionCode = 13
+        versionName = "1.0-B13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

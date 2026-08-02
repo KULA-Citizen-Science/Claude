@@ -6,6 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kula.anagram.core.Anagrams
+import com.kula.anagram.core.Board
+import com.kula.anagram.core.BoardState
+import com.kula.anagram.core.Boards
 import com.kula.anagram.core.Cell
 import com.kula.anagram.core.SavedAnagram
 import com.kula.anagram.data.SavedAnagramStore
@@ -87,27 +90,14 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         werkbank = werkbank + Cell.Space(nextId++)
     }
 
-    /** Moves the cell with [cellId] to [zone] at [index], wherever it currently sits. */
+    /** Moves the cell with [cellId] to [zone] at [index]. Delegates to the unit-tested [Boards.move]. */
     fun drop(cellId: Int, zone: Zone, index: Int) {
-        val cell = findCell(cellId) ?: return
-        // A space never leaves the workbench; the board clamps its target there, and this guards it.
-        if (cell is Cell.Space && zone == Zone.ABLAGE) return
-
-        val newWerkbank = werkbank.filterNot { it.id == cellId }.toMutableList()
-        val newAblage = ablage.filterNot { it.id == cellId }.toMutableList()
-        when (zone) {
-            Zone.WERKBANK -> newWerkbank.add(index.coerceIn(0, newWerkbank.size), cell)
-            Zone.ABLAGE -> newAblage.add(index.coerceIn(0, newAblage.size), cell as Cell.Letter)
-        }
-        werkbank = newWerkbank
-        ablage = newAblage
+        apply(Boards.move(boardState(), cellId, zone.toBoard(), index))
     }
 
     /** Removes a space from the workbench. Bound to a long press; letters are left untouched. */
     fun longPressCell(cellId: Int) {
-        if (werkbank.firstOrNull { it.id == cellId } is Cell.Space) {
-            werkbank = werkbank.filterNot { it.id == cellId }
-        }
+        apply(Boards.removeSpace(boardState(), cellId))
     }
 
     /**
@@ -116,18 +106,7 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
      * break the user placed; a space is removed with a long press.
      */
     fun tapCell(cellId: Int) {
-        val onWerkbank = werkbank.firstOrNull { it.id == cellId }
-        if (onWerkbank != null) {
-            if (onWerkbank !is Cell.Letter) return
-            werkbank = werkbank.filterNot { it.id == cellId }
-            ablage = ablage + onWerkbank
-            return
-        }
-        val onAblage = ablage.firstOrNull { it.id == cellId }
-        if (onAblage != null) {
-            ablage = ablage.filterNot { it.id == cellId }
-            werkbank = werkbank + onAblage
-        }
+        apply(Boards.tap(boardState(), cellId))
     }
 
     /** Randomly rearranges the workbench, preferring an order different from the current one. */
@@ -165,6 +144,17 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         store.save(saved)
     }
 
-    private fun findCell(id: Int): Cell? =
-        werkbank.firstOrNull { it.id == id } ?: ablage.firstOrNull { it.id == id }
+    private fun boardState() = BoardState(werkbank, ablage)
+
+    private fun apply(next: BoardState) {
+        werkbank = next.werkbank
+        ablage = next.ablage
+    }
+
+    private fun Zone.toBoard(): Board = when (this) {
+        Zone.WERKBANK -> Board.WERKBANK
+        Zone.ABLAGE -> Board.ABLAGE
+    }
+
+
 }

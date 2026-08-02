@@ -115,6 +115,17 @@ fun WorkBoard(
         return null
     }
 
+    // Renders the workbench compactly (letters as themselves, a space as "_") so the diagnostics show
+    // whether the model actually changed between one gesture and the next.
+    fun renderWerkbank(): String = buildString {
+        werkbankState.value.forEach {
+            when (it) {
+                is Cell.Letter -> append(it.char)
+                is Cell.Space -> append('_')
+            }
+        }
+    }
+
     // Where would the dragged cell drop, given the position of the floating tile? Returns the target
     // board and the insertion index into that board's list (with the dragged cell removed).
     //
@@ -182,30 +193,42 @@ fun WorkBoard(
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
         val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B12 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
-            "cur=$cur tgt=$target kacheln=${centers.size}"
+        debug = "B13 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
         draggingId = null
     }
 
-    val startDrag: (Int, Offset) -> Unit = { id, local ->
-        val center = centers[id]
+    // Every gesture is logged, so a screenshot shows whether a drag armed at all or the press was
+    // classified as something else.
+    val tap: (Int) -> Unit = { id ->
+        debug = "B13 TIPP id=$id"
+        onTap(id)
+    }
+    val longPress: (Int) -> Unit = { id ->
+        debug = "B13 LANG id=$id"
+        onLongPress(id)
+    }
+
+    // The cell hands in its own measured centre, so arming a drag never depends on the shared table of
+    // measurements having an entry for it yet.
+    val startDrag: (Int, Offset, Offset?) -> Unit = { id, local, own ->
+        val center = own ?: centers[id]
         if (center != null) {
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B12 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
+            debug = "B13 ziehe id=$id wb=${renderWerkbank()}"
         } else {
-            debug = "B12 ziehe id=$id ABBRUCH: keine Position gemessen"
+            debug = "B13 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
     // Absolute, drift-free: the tile's centre is its home centre plus how far the finger has travelled
     // inside the cell it was grabbed in.
-    val dragTo: (Int, Offset) -> Unit = { id, local ->
-        centers[id]?.let { floatCenter = it + (local - grabPoint) }
+    val dragTo: (Int, Offset, Offset?) -> Unit = { id, local, own ->
+        (own ?: centers[id])?.let { floatCenter = it + (local - grabPoint) }
     }
 
     Box(modifier = modifier.onGloballyPositioned { rootWindowPos = it.positionInWindow() }) {
@@ -217,8 +240,8 @@ fun WorkBoard(
                 cells = ablage,
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
-                onTap = onTap,
-                onLongPress = onLongPress,
+                onTap = tap,
+                onLongPress = longPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -230,8 +253,8 @@ fun WorkBoard(
                 cells = werkbank,
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
-                onTap = onTap,
-                onLongPress = onLongPress,
+                onTap = tap,
+                onLongPress = longPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -287,8 +310,8 @@ private fun ZoneSection(
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
     onLongPress: (Int) -> Unit,
-    onDragStart: (Int, Offset) -> Unit,
-    onDragTo: (Int, Offset) -> Unit,
+    onDragStart: (Int, Offset, Offset?) -> Unit,
+    onDragTo: (Int, Offset, Offset?) -> Unit,
     onDragEnd: (Int) -> Unit,
     trailing: (@Composable () -> Unit)?,
 ) {
@@ -322,6 +345,9 @@ private fun ZoneSection(
             ) {
                 cells.forEach { cell ->
                     key(cell.id) {
+                        // The cell keeps its own measurement as well, so a gesture on a freshly inserted
+                        // cell never has to wait for the shared table to catch up.
+                        var ownCenter by remember { mutableStateOf<Offset?>(null) }
                         CellView(
                             cell = cell,
                             placeholder = cell.id == draggingId,
@@ -329,11 +355,10 @@ private fun ZoneSection(
                                 .animatePlacement()
                                 .onGloballyPositioned { coords ->
                                     if (coords.isAttached) {
-                                        onCellCenter(
-                                            cell.id,
-                                            coords.positionInWindow() +
-                                                Offset(coords.size.width / 2f, coords.size.height / 2f),
-                                        )
+                                        val c = coords.positionInWindow() +
+                                            Offset(coords.size.width / 2f, coords.size.height / 2f)
+                                        ownCenter = c
+                                        onCellCenter(cell.id, c)
                                     }
                                 }
                                 // One combined gesture handler: a press that never crosses the touch
@@ -362,12 +387,12 @@ private fun ZoneSection(
                                             if (!dragging) {
                                                 if ((change.position - down.position).getDistance() > touchSlop) {
                                                     dragging = true
-                                                    onDragStart(cell.id, down.position)
-                                                    onDragTo(cell.id, change.position)
+                                                    onDragStart(cell.id, down.position, ownCenter)
+                                                    onDragTo(cell.id, change.position, ownCenter)
                                                     change.consume()
                                                 }
                                             } else {
-                                                onDragTo(cell.id, change.position)
+                                                onDragTo(cell.id, change.position, ownCenter)
                                                 change.consume()
                                             }
                                         }
