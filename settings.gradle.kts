@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StylusNotes"
+rootProject.name = "Anagramm"
 include(":app")
 include(":core")
