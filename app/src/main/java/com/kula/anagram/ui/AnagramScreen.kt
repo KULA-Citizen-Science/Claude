@@ -50,20 +50,7 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
     val keyboard = LocalSoftwareKeyboardController.current
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                // Build marker so it is unambiguous which APK is installed while we chase the drag bug.
-                actions = {
-                    Text(
-                        text = "B16",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(end = 16.dp),
-                    )
-                },
-            )
-        },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
     ) { padding ->
         Column(
             modifier = Modifier

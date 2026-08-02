@@ -91,9 +91,6 @@ fun WorkBoard(
     var floatCenter by remember { mutableStateOf(Offset.Zero) }
     // Where inside its own cell the finger first landed, so the tile keeps the grab point under it.
     var grabPoint by remember { mutableStateOf(Offset.Zero) }
-    // Temporary on-screen diagnostics so drag behaviour can be inspected on a real device.
-    var debug by remember { mutableStateOf("bereit") }
-
     // Drop measurements for cells that no longer exist, so a stale entry can never be consulted.
     val liveIds = remember(werkbank, ablage) { (werkbank.map { it.id } + ablage.map { it.id }).toSet() }
     LaunchedEffect(liveIds) { centers.keys.retainAll(liveIds) }
@@ -102,17 +99,6 @@ fun WorkBoard(
         werkbankState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.WERKBANK to it }
         ablageState.value.indexOfFirst { it.id == id }.let { if (it >= 0) return Zone.ABLAGE to it }
         return null
-    }
-
-    // Renders the workbench compactly (letters as themselves, a space as "_") so the diagnostics show
-    // whether the model actually changed between one gesture and the next.
-    fun renderWerkbank(): String = buildString {
-        werkbankState.value.forEach {
-            when (it) {
-                is Cell.Letter -> append(it.char)
-                is Cell.Space -> append('_')
-            }
-        }
     }
 
     // Where would the dragged cell drop, given the position of the floating tile? Returns the target
@@ -181,36 +167,21 @@ fun WorkBoard(
         }
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
-        val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B16 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
         draggingId = null
     }
 
-    // Every gesture is logged, so a screenshot shows whether a drag armed at all or the press was
-    // classified as something else.
-    val tap: (Int) -> Unit = { id ->
-        debug = "B16 TIPP id=$id"
-        onTap(id)
-    }
-    val longPress: (Int) -> Unit = { id ->
-        debug = "B16 LANG id=$id"
-        onLongPress(id)
-    }
-
     // The cell hands in its own measured centre, so arming a drag never depends on the shared table of
     // measurements having an entry for it yet.
     val startDrag: (Int, Offset, Offset?) -> Unit = { id, local, own ->
+        // Without a measured centre there is nothing to anchor the drag to, so it simply does not arm.
         val center = own ?: centers[id]
         if (center != null) {
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B16 ziehe id=$id wb=${renderWerkbank()}"
-        } else {
-            debug = "B16 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
@@ -229,8 +200,8 @@ fun WorkBoard(
                 cells = ablage,
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
-                onTap = tap,
-                onLongPress = longPress,
+                onTap = onTap,
+                onLongPress = onLongPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -242,8 +213,8 @@ fun WorkBoard(
                 cells = werkbank,
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
-                onTap = tap,
-                onLongPress = longPress,
+                onTap = onTap,
+                onLongPress = onLongPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -260,11 +231,6 @@ fun WorkBoard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = "🐞 $debug",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-            )
         }
 
         // The floating copy of the cell being dragged, pinned under the finger and drawn on top.

@@ -14,8 +14,9 @@ Anagramme werden lokal unter „Meine Anagramme“ gespeichert.
   ins Ablageboard gelegt (Leerzeichen, Ziffern und Satzzeichen werden ignoriert, Umlaute und ß bleiben
   erhalten). Die Anzeige erfolgt durchgehend in Großbuchstaben.
 - **Ablageboard (oben) & Werkbank (unten)** – eine Kachel lässt sich per Drag innerhalb eines Bereichs
-  umsortieren **oder** in den anderen Bereich ziehen; die übrigen Kacheln gleiten dabei sanft zur
-  Seite. **Tippen** auf einen Buchstaben schickt ihn schnell in den jeweils anderen Bereich.
+  umsortieren **oder** in den anderen Bereich ziehen. Während des Ziehens schwebt sie unter dem Finger,
+  ihr Ausgangsplatz bleibt blass sichtbar, und beim Loslassen rastet sie an der nächstgelegenen Stelle
+  ein. **Tippen** auf einen Buchstaben schickt ihn schnell in den jeweils anderen Bereich.
 - **Leerzeichen einfügen** – „+ Leerzeichen“ setzt auf der Werkbank ein Trennzeichen, das sich dort
   **genau wie ein Buchstabe** verschieben lässt. Es kann die Werkbank nicht verlassen und geht daher
   beim Ziehen nie verloren; ein Tipp darauf bewirkt bewusst nichts, und **langes Drücken** entfernt
@@ -31,9 +32,10 @@ Anagramme werden lokal unter „Meine Anagramme“ gespeichert.
 
 ## Projektstruktur
 
-- `core/` — reines Kotlin/JVM-Modul ohne Android-Abhängigkeit. Die gesamte Anagramm-Logik liegt hier
-  (`Anagrams`): Buchstaben aus der Eingabe extrahieren, Kacheln erzeugen, das Wort buchstabieren,
-  Anagramm-Signatur/-Prüfung, Umsortieren und deterministisches Mischen — mit JUnit-Tests.
+- `core/` — reines Kotlin/JVM-Modul ohne Android-Abhängigkeit, vollständig mit JUnit-Tests abgedeckt.
+  `Anagrams` enthält die Wortlogik (Buchstaben aus der Eingabe extrahieren, Kacheln erzeugen, das Wort
+  buchstabieren, Anagramm-Signatur und -Prüfung, deterministisches Mischen), `Boards` die
+  Brett-Logik (Kachel verschieben, antippen, Leerzeichen entfernen) über einem `BoardState`.
 - `app/` — die Android-App: Jetpack-Compose-UI (`AnagramScreen`), das interaktive Zwei-Zonen-Brett
   mit zonenübergreifendem Drag & Drop (`WorkBoard` — Werkbank + Ablageboard, Leerzeichen), das
   `AnagramViewModel` und die lokale Persistenz der gespeicherten Anagramme über `SharedPreferences`
