@@ -182,7 +182,7 @@ fun WorkBoard(
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
         val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B15 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
+        debug = "B16 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
@@ -192,11 +192,11 @@ fun WorkBoard(
     // Every gesture is logged, so a screenshot shows whether a drag armed at all or the press was
     // classified as something else.
     val tap: (Int) -> Unit = { id ->
-        debug = "B15 TIPP id=$id"
+        debug = "B16 TIPP id=$id"
         onTap(id)
     }
     val longPress: (Int) -> Unit = { id ->
-        debug = "B15 LANG id=$id"
+        debug = "B16 LANG id=$id"
         onLongPress(id)
     }
 
@@ -208,9 +208,9 @@ fun WorkBoard(
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B15 ziehe id=$id wb=${renderWerkbank()}"
+            debug = "B16 ziehe id=$id wb=${renderWerkbank()}"
         } else {
-            debug = "B15 ziehe id=$id ABBRUCH: keine Position gemessen"
+            debug = "B16 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
@@ -332,9 +332,14 @@ private fun ZoneSection(
                 horizontalArrangement = Arrangement.spacedBy(TileSpacing),
                 verticalArrangement = Arrangement.spacedBy(TileSpacing),
             ) {
-                cells.forEach { cell ->
-                    key(cell.id) {
-                        // The cell keeps its own measurement as well, so a gesture on a freshly inserted
+                // Deliberately *not* keyed by cell id. With key(cell.id) each tile kept the slot it was
+                // first created in and merely carried its letter along, so a reordered list left the row
+                // frozen in its original order while the model moved on — exactly what the recordings
+                // showed. Composing by position makes slot i always render cells[i], so the row cannot
+                // disagree with the list.
+                cells.forEachIndexed { position, cell ->
+                    key(position) {
+                        // The tile keeps its own measurement as well, so a gesture on a freshly inserted
                         // cell never has to wait for the shared table to catch up.
                         var ownCenter by remember { mutableStateOf<Offset?>(null) }
                         CellView(
