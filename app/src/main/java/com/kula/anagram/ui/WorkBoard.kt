@@ -1,9 +1,5 @@
 package com.kula.anagram.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -34,22 +30,18 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.round
 import com.kula.anagram.R
 import com.kula.anagram.core.Cell
 import kotlin.math.roundToInt
@@ -190,7 +182,7 @@ fun WorkBoard(
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
         val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B14 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
+        debug = "B15 drop id=$id $kind cur=$cur tgt=$target wb=${renderWerkbank()}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
         }
@@ -200,11 +192,11 @@ fun WorkBoard(
     // Every gesture is logged, so a screenshot shows whether a drag armed at all or the press was
     // classified as something else.
     val tap: (Int) -> Unit = { id ->
-        debug = "B14 TIPP id=$id"
+        debug = "B15 TIPP id=$id"
         onTap(id)
     }
     val longPress: (Int) -> Unit = { id ->
-        debug = "B14 LANG id=$id"
+        debug = "B15 LANG id=$id"
         onLongPress(id)
     }
 
@@ -216,9 +208,9 @@ fun WorkBoard(
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B14 ziehe id=$id wb=${renderWerkbank()}"
+            debug = "B15 ziehe id=$id wb=${renderWerkbank()}"
         } else {
-            debug = "B14 ziehe id=$id ABBRUCH: keine Position gemessen"
+            debug = "B15 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
@@ -349,7 +341,6 @@ private fun ZoneSection(
                             cell = cell,
                             placeholder = cell.id == draggingId,
                             modifier = Modifier
-                                .animatePlacement()
                                 .onGloballyPositioned { coords ->
                                     if (coords.isAttached) {
                                         val c = coords.positionInWindow() +
@@ -446,39 +437,4 @@ private fun CellView(
             }
         }
     }
-}
-
-/**
- * Animates a child from its previous placement to its new one whenever the layout reorders, so cells
- * slide into place smoothly instead of jumping.
- *
- * The animation is driven by a [LaunchedEffect] keyed on the target slot, *not* by launching a
- * coroutine from `onPlaced`. That earlier shape could strand a tile: several placements in one frame
- * raced each other, and once an `animateTo` was cancelled the animatable kept the cancelled target, so
- * the "has the target changed?" guard refused to start a new run and the tile kept drawing at an old
- * offset — the model was right while the board showed a stale order. Keying the effect on the target
- * makes every change cancel the previous run and animate from wherever the tile currently is to the
- * slot it actually occupies now.
- */
-private fun Modifier.animatePlacement(): Modifier = composed {
-    var target by remember { mutableStateOf<IntOffset?>(null) }
-    val animatable = remember { Animatable(IntOffset.Zero, IntOffset.VectorConverter) }
-    var settled by remember { mutableStateOf(false) }
-
-    LaunchedEffect(target) {
-        val slot = target ?: return@LaunchedEffect
-        if (!settled) {
-            animatable.snapTo(slot)
-            settled = true
-        } else {
-            animatable.animateTo(slot, spring(stiffness = Spring.StiffnessMediumLow))
-        }
-    }
-
-    this
-        .onPlaced { coordinates -> target = coordinates.positionInParent().round() }
-        .offset {
-            val slot = target
-            if (slot == null || !settled) IntOffset.Zero else animatable.value - slot
-        }
 }
