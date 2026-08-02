@@ -14,7 +14,7 @@
     <string name="zone_werkbank_hint">Hier das Anagramm zusammensetzen · Ziehen zum Umsortieren · Tippen legt den Buchstaben zurück</string>
     <string name="zone_ablage">Ablageboard</string>
     <string name="zone_ablage_hint">Vorrat der noch freien Buchstaben · Tippen schickt einen zur Werkbank</string>
-    <string name="space_hint">Leerzeichen lassen sich verschieben · zum Löschen ins Ablageboard ziehen</string>
+    <string name="space_hint">Leerzeichen lassen sich wie Buchstaben verschieben · langes Drücken entfernt eines</string>
     <string name="badge_incomplete">Unvollständig – es liegen noch Buchstaben im Ablageboard</string>
     <string name="empty_hint">Gib oben einen Begriff oder Namen ein und tippe auf „Buchstaben laden“. Die Buchstaben landen dann im Ablageboard, von wo du sie auf die Werkbank ziehst.</string>
     <string name="saved_title">Meine Anagramme</string>

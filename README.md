@@ -16,10 +16,10 @@ Anagramme werden lokal unter „Meine Anagramme“ gespeichert.
 - **Ablageboard (oben) & Werkbank (unten)** – eine Kachel lässt sich per Drag innerhalb eines Bereichs
   umsortieren **oder** in den anderen Bereich ziehen; die übrigen Kacheln gleiten dabei sanft zur
   Seite. **Tippen** auf einen Buchstaben schickt ihn schnell in den jeweils anderen Bereich.
-- **Leerzeichen einfügen** – „+ Leerzeichen“ setzt auf der Werkbank ein Trennzeichen, das sich wie
-  eine Kachel verschieben lässt. Zum Entfernen zieht man es ins Ablageboard; ein Tipp darauf bewirkt
-  bewusst nichts, damit ein gesetzter Wortabstand nicht versehentlich verloren geht. So entstehen
-  mehrwortige Anagramme (z. B. „ANNA LENA“ → „ALAN ENNA“).
+- **Leerzeichen einfügen** – „+ Leerzeichen“ setzt auf der Werkbank ein Trennzeichen, das sich dort
+  **genau wie ein Buchstabe** verschieben lässt. Es kann die Werkbank nicht verlassen und geht daher
+  beim Ziehen nie verloren; ein Tipp darauf bewirkt bewusst nichts, und **langes Drücken** entfernt
+  es. So entstehen mehrwortige Anagramme (z. B. „ANNA LENA“ → „ALAN ENNA“).
 - **Mischen** – ordnet die Buchstaben auf der Werkbank zufällig neu an (und vermeidet dabei nach
   Möglichkeit die gerade gezeigte Reihenfolge).
 - **Zurücksetzen** – legt alle Buchstaben zurück ins Ablageboard und leert Werkbank und Leerzeichen.
@@ -77,9 +77,9 @@ Die eigentliche Drag-Interaktion braucht einen Touchscreen und lässt sich nur v
       beiden Bereichen funktioniert. Ein Tipp auf einen Buchstaben schickt ihn in den anderen Bereich.
 - [ ] Eine Kachel innerhalb der Werkbank ziehen; die übrigen Buchstaben rücken zur Seite, beim
       Loslassen sitzt der Buchstabe an der neuen Position, und das Wort oben aktualisiert sich.
-- [ ] „+ Leerzeichen“ tippen — auf der Werkbank erscheint ein Trennzeichen; es lässt sich verschieben,
-      ein Tipp darauf bewirkt nichts, und ins Ablageboard gezogen verschwindet es. Ergebnis z. B.
-      „ALAN ENNA“.
+- [ ] „+ Leerzeichen“ tippen — auf der Werkbank erscheint ein Trennzeichen; es lässt sich genau wie ein
+      Buchstabe an jede Stelle der Werkbank ziehen, ein Tipp darauf bewirkt nichts, und langes Drücken
+      entfernt es. Ergebnis z. B. „ALAN ENNA“.
 - [ ] Solange noch Buchstaben im Ablageboard liegen, zeigt die Statuszeile „Unvollständig“; erst wenn
       alle Buchstaben auf der Werkbank sind und die Reihenfolge abweicht, steht dort „Anagramm“.
 - [ ] „Mischen“ ordnet die Werkbank zufällig neu; „Zurücksetzen“ legt alles zurück ins Ablageboard.

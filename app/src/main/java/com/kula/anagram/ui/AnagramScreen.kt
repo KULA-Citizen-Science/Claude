@@ -56,7 +56,7 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
                 // Build marker so it is unambiguous which APK is installed while we chase the drag bug.
                 actions = {
                     Text(
-                        text = "B11",
+                        text = "B12",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(end = 16.dp),
@@ -125,6 +125,7 @@ fun AnagramScreen(viewModel: AnagramViewModel = viewModel()) {
                     ablage = viewModel.ablage,
                     onDrop = viewModel::drop,
                     onTap = viewModel::tapCell,
+                    onLongPress = viewModel::longPressCell,
                     onAddSpace = viewModel::addSpace,
                     modifier = Modifier.fillMaxWidth(),
                 )

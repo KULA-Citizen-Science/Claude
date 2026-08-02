@@ -87,18 +87,11 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         werkbank = werkbank + Cell.Space(nextId++)
     }
 
-    /**
-     * Moves the cell with [cellId] to [zone] at [index], wherever it currently sits. Spaces belong to
-     * the workbench, so dragging one onto the tray deletes it instead — that is how a space is removed.
-     */
+    /** Moves the cell with [cellId] to [zone] at [index], wherever it currently sits. */
     fun drop(cellId: Int, zone: Zone, index: Int) {
         val cell = findCell(cellId) ?: return
-        if (cell is Cell.Space) {
-            if (zone == Zone.ABLAGE) {
-                werkbank = werkbank.filterNot { it.id == cellId }
-                return
-            }
-        }
+        // A space never leaves the workbench; the board clamps its target there, and this guards it.
+        if (cell is Cell.Space && zone == Zone.ABLAGE) return
 
         val newWerkbank = werkbank.filterNot { it.id == cellId }.toMutableList()
         val newAblage = ablage.filterNot { it.id == cellId }.toMutableList()
@@ -110,10 +103,17 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         ablage = newAblage
     }
 
+    /** Removes a space from the workbench. Bound to a long press; letters are left untouched. */
+    fun longPressCell(cellId: Int) {
+        if (werkbank.firstOrNull { it.id == cellId } is Cell.Space) {
+            werkbank = werkbank.filterNot { it.id == cellId }
+        }
+    }
+
     /**
      * Quick action on tap: a workbench letter goes to the end of the tray and a tray letter to the end
      * of the workbench. Tapping a space does nothing — an accidental tap must never destroy a word
-     * break the user placed; spaces are removed by dragging them onto the tray.
+     * break the user placed; a space is removed with a long press.
      */
     fun tapCell(cellId: Int) {
         val onWerkbank = werkbank.firstOrNull { it.id == cellId }

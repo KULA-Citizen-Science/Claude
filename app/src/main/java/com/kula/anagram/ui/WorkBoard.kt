@@ -68,8 +68,9 @@ private val ZoneMinHeight = 72.dp
  * The interactive two-board area: a **Werkbank** (workbench) where the anagram is assembled and an
  * **Ablageboard** (tray) where letters can be parked. Drag a cell to lift it — it floats under the
  * finger — and release it where it should go: within a board to reorder, or over the other board to
- * move it there. Tapping a letter sends it to the other board. Spaces live on the workbench only;
- * dragging one onto the tray deletes it, and tapping one does nothing so it cannot be lost by accident.
+ * move it there. Tapping a letter sends it to the other board. A space lives on the workbench only and
+ * moves there exactly like a letter — it can never be dragged off the board, tapping one does nothing,
+ * and it is removed with a deliberate long press.
  *
  * Geometry is measured in window coordinates ([positionInWindow]) so cell centres and the dragged
  * finger share one space regardless of layout ordering. The dragged position is recomputed absolutely
@@ -83,6 +84,7 @@ fun WorkBoard(
     ablage: List<Cell.Letter>,
     onDrop: (cellId: Int, zone: Zone, index: Int) -> Unit,
     onTap: (cellId: Int) -> Unit,
+    onLongPress: (cellId: Int) -> Unit,
     onAddSpace: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +128,7 @@ fun WorkBoard(
     // position pick the slot within that board. Deciding by "nearest cell across both boards" instead
     // made a lone letter on the other board act as a magnet that swallowed drops.
     fun targetFor(id: Int, point: Offset): Pair<Zone, Int>? {
+        val isSpace = werkbankState.value.firstOrNull { it.id == id } is Cell.Space
         val werkCells = werkbankState.value.filter { it.id != id }
         val trayCells = ablageState.value.filter { it.id != id }
         val tile = with(density) { TileSize.toPx() }
@@ -142,7 +145,14 @@ fun WorkBoard(
             else -> return null
         }
 
-        val zone = if (point.y <= boundary) Zone.ABLAGE else Zone.WERKBANK
+        // A space belongs to the workbench and simply stays there: an upward drag repositions it among
+        // the letters instead of leaving the board, so it moves exactly like a letter and can never be
+        // lost by dragging. Removing one is a deliberate long press.
+        val zone = when {
+            isSpace -> Zone.WERKBANK
+            point.y <= boundary -> Zone.ABLAGE
+            else -> Zone.WERKBANK
+        }
         val cells = if (zone == Zone.WERKBANK) werkCells else trayCells
         if (cells.isEmpty()) return zone to 0
 
@@ -161,12 +171,18 @@ fun WorkBoard(
         return zone to (bestIndex + if (bestAfter) 1 else 0)
     }
 
-    // Called once, when the finger lifts: place the dragged cell where it was released.
+    // Called once, when the finger lifts: place the dragged cell where it was released. If the drag was
+    // never actually armed (no measured centre for this cell), do nothing rather than act on a position
+    // left over from an earlier drag.
     fun finishDrag(id: Int) {
+        if (draggingId != id) {
+            draggingId = null
+            return
+        }
         val cur = currentPosition(id)
         val target = targetFor(id, floatCenter)
         val kind = if (werkbankState.value.firstOrNull { it.id == id } is Cell.Space) "SP" else "L"
-        debug = "B11 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
+        debug = "B12 drop id=$id $kind p=${floatCenter.x.toInt()},${floatCenter.y.toInt()} " +
             "cur=$cur tgt=$target kacheln=${centers.size}"
         if (target != null && cur != target) {
             onDrop(id, target.first, target.second)
@@ -180,9 +196,9 @@ fun WorkBoard(
             draggingId = id
             grabPoint = local
             floatCenter = center
-            debug = "B11 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
+            debug = "B12 ziehe id=$id start=${center.x.toInt()},${center.y.toInt()}"
         } else {
-            debug = "B11 ziehe id=$id ABBRUCH: keine Position gemessen"
+            debug = "B12 ziehe id=$id ABBRUCH: keine Position gemessen"
         }
     }
 
@@ -202,6 +218,7 @@ fun WorkBoard(
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
+                onLongPress = onLongPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -214,6 +231,7 @@ fun WorkBoard(
                 draggingId = draggingId,
                 onCellCenter = { id, c -> centers[id] = c },
                 onTap = onTap,
+                onLongPress = onLongPress,
                 onDragStart = startDrag,
                 onDragTo = dragTo,
                 onDragEnd = { id -> finishDrag(id) },
@@ -268,6 +286,7 @@ private fun ZoneSection(
     draggingId: Int?,
     onCellCenter: (Int, Offset) -> Unit,
     onTap: (Int) -> Unit,
+    onLongPress: (Int) -> Unit,
     onDragStart: (Int, Offset) -> Unit,
     onDragTo: (Int, Offset) -> Unit,
     onDragEnd: (Int) -> Unit,
@@ -329,7 +348,15 @@ private fun ZoneSection(
                                             val event = awaitPointerEvent()
                                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                             if (!change.pressed) {
-                                                if (!dragging) onTap(cell.id)
+                                                // Classified on release, so holding can never race a drag.
+                                                if (!dragging) {
+                                                    val held = change.uptimeMillis - down.uptimeMillis
+                                                    if (held >= viewConfiguration.longPressTimeoutMillis) {
+                                                        onLongPress(cell.id)
+                                                    } else {
+                                                        onTap(cell.id)
+                                                    }
+                                                }
                                                 break
                                             }
                                             if (!dragging) {
