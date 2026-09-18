@@ -1,0 +1,243 @@
+// The ONLY module besides main.ts that touches Obsidian / TaskNotes. Every hard
+// constraint is enforced here so the rest of the plugin can't violate them:
+//   - apiVersion === 1 + hasCapability() gate on every entry point
+//   - graceful handling when TaskNotes is absent / not-yet-loaded, retried
+//     after lifecycle.ready()
+//   - mutation context { source: "ef-layer", correlationId, reason } on writes
+//   - inbound events with source === "ef-layer" ignored (no self-trigger loop)
+//   - TaskNotesApiError handled via api.errors.toResult
+
+import type { App, EventRef } from "obsidian";
+import type {
+  ApiResult,
+  RuntimeApiV1,
+  RuntimeEvent,
+  MutationContext,
+  TaskNotesPlugin,
+  TaskNotesTask,
+} from "./runtime-api";
+
+/** The source tag stamped on our writes and used to ignore our own events. */
+export const MUTATION_SOURCE = "ef-layer";
+
+// The runtime may expose a user field's frontmatter key under any of these
+// property names; collect them all so verification isn't brittle to the shape.
+const KEY_PROPS = ["key", "id", "propertyName", "property", "name", "frontmatterKey", "mappedKey"];
+
+function candidateKeys(field: unknown): string[] {
+  if (!field || typeof field !== "object") return [];
+  const rec = field as Record<string, unknown>;
+  const out: string[] = [];
+  for (const p of KEY_PROPS) {
+    const v = rec[p];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  return out;
+}
+
+interface PluginsRegistry {
+  getPlugin(id: string): TaskNotesPlugin | null;
+}
+
+export type WriteOutcome =
+  | { ok: true; task: TaskNotesTask }
+  | { ok: false; reason: "no-capability" | "error"; code?: string; message?: string };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function randomId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID() : `ef-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export class TaskNotesGateway {
+  constructor(private readonly app: App) {}
+
+  private plugin(): TaskNotesPlugin | null {
+    // `app.plugins` is not in Obsidian's public typings; access it structurally.
+    const plugins = (this.app as unknown as { plugins?: PluginsRegistry }).plugins;
+    return plugins?.getPlugin("tasknotes") ?? null;
+  }
+
+  /** Resolve the runtime API with the version gate applied. Null when TaskNotes
+   *  is missing, not yet loaded, or a different major API version. */
+  resolve(): RuntimeApiV1 | null {
+    const api = this.plugin()?.api;
+    if (!api || api.apiVersion !== 1) return null;
+    return api;
+  }
+
+  isAvailable(): boolean {
+    return this.resolve() !== null;
+  }
+
+  /** Resolve and require a capability in one step. */
+  private apiWith(capability: string): RuntimeApiV1 | null {
+    const api = this.resolve();
+    if (!api || !api.hasCapability(capability)) return null;
+    return api;
+  }
+
+  /**
+   * Wait until TaskNotes is present and its runtime reports ready. Handles the
+   * common case where TaskNotes loads after us, by polling for the API up to
+   * `timeoutMs`, then awaiting `lifecycle.ready()`. Returns false on timeout.
+   */
+  async whenReady(timeoutMs = 15000, pollMs = 250): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    let api = this.resolve();
+    while (!api && Date.now() < deadline) {
+      await sleep(pollMs);
+      api = this.resolve();
+    }
+    if (!api) return false;
+    try {
+      await api.lifecycle.ready();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private context(reason: string): MutationContext {
+    return { source: MUTATION_SOURCE, correlationId: randomId(), reason };
+  }
+
+  /** The configured user-field property keys, or null if the catalog is
+   *  unreadable (TaskNotes absent / capability missing). Tolerant of which
+   *  property the runtime uses for the frontmatter key (key/id/property/...). */
+  userFieldKeys(): Set<string> | null {
+    const raw = this.userFieldsRaw();
+    if (raw === null) return null;
+    const set = new Set<string>();
+    for (const f of raw) {
+      for (const v of candidateKeys(f)) set.add(v);
+    }
+    return set;
+  }
+
+  /** The raw user-field objects from the catalog, for diagnostics. Null if the
+   *  catalog is unreadable. */
+  userFieldsRaw(): unknown[] | null {
+    const api = this.apiWith("catalog.read");
+    if (!api) return null;
+    try {
+      return (api.catalog.userFields() as unknown[]) ?? [];
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Subscribe to `task.created`, skipping events caused by our own writes.
+   * Returns an EventRef to hand to Plugin.registerEvent, or null if the events
+   * capability is unavailable.
+   */
+  onTaskCreated(handler: (task: TaskNotesTask, event: RuntimeEvent) => void): EventRef | null {
+    const api = this.apiWith("tasks.events");
+    if (!api) return null;
+    return api.events.on("task.created", (event: RuntimeEvent) => {
+      if (event.source === MUTATION_SOURCE) return; // never react to our own writes
+      const task = event.task ?? event.after;
+      if (task) handler(task, event);
+    });
+  }
+
+  /** Write an EF patch through the update service, with mutation context and
+   *  typed-error handling. */
+  async updateTask(
+    path: string,
+    patch: Record<string, unknown>,
+    reason: string,
+  ): Promise<WriteOutcome> {
+    const api = this.apiWith("tasks.write");
+    if (!api) return { ok: false, reason: "no-capability" };
+
+    const result: ApiResult<TaskNotesTask> = await api.errors.toResult(() =>
+      api.tasks.update(path, patch, this.context(reason)),
+    );
+    if (result.ok) return { ok: true, task: result.value };
+    return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
+  }
+
+  /** Does a real file exist at this vault path? Used to avoid firing writes at
+   *  phantom / stale index entries. */
+  fileExists(path: string): boolean {
+    if (!path) return false;
+    const normalized = path.replace(/^\/+/, "");
+    try {
+      return this.app.vault.getAbstractFileByPath(normalized) != null;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Set a task's status through the update service, with mutation context. */
+  async setStatus(path: string, status: string, reason: string): Promise<WriteOutcome> {
+    const api = this.apiWith("tasks.write");
+    if (!api) return { ok: false, reason: "no-capability" };
+
+    const result: ApiResult<TaskNotesTask> = await api.errors.toResult(() =>
+      api.tasks.setStatus(path, status, this.context(reason)),
+    );
+    if (result.ok) return { ok: true, task: result.value };
+    return { ok: false, reason: "error", code: result.error.code, message: result.error.message };
+  }
+
+  /** The set of status values TaskNotes treats as completed (defaults to
+   *  {"done"} when the catalog is unreadable). */
+  completedStatuses(): Set<string> {
+    const api = this.apiWith("catalog.read");
+    if (!api) return new Set(["done"]);
+    try {
+      const set = new Set<string>();
+      for (const s of api.catalog.statuses() ?? []) {
+        if (s?.isCompleted && typeof s.value === "string") set.add(s.value);
+      }
+      return set.size ? set : new Set(["done"]);
+    } catch {
+      return new Set(["done"]);
+    }
+  }
+
+  /** Title of the task's first not-completed subtask, or null. Used to suggest a
+   *  concrete first step. */
+  async firstIncompleteSubtask(path: string): Promise<string | null> {
+    const api = this.apiWith("relationships.read");
+    if (!api) return null;
+    const completed = this.completedStatuses();
+    try {
+      for (const sub of (await api.relationships.subtasks(path)) ?? []) {
+        if (!sub) continue;
+        if (typeof sub.status === "string" && completed.has(sub.status)) continue;
+        if (typeof sub.title === "string" && sub.title.trim()) return sub.title;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** All tasks in scope, preferring the stable query API and falling back to
+   *  tasks.list(). Returns [] when nothing is readable. */
+  async listTasks(): Promise<TaskNotesTask[]> {
+    const q = this.apiWith("query.tasks");
+    if (q) {
+      try {
+        const res = await q.query.tasks({ scope: { includeArchived: false } });
+        return res.tasks ?? [];
+      } catch {
+        // fall through to tasks.list
+      }
+    }
+    const api = this.apiWith("tasks.read");
+    if (!api) return [];
+    try {
+      return (await api.tasks.list()) ?? [];
+    } catch {
+      return [];
+    }
+  }
+}
