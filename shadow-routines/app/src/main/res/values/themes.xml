@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme; Compose drives the real colors via ShadowRoutinesTheme. This exists so the
+         manifest has a valid Material3 parent and the app has a sane splash background. -->
+    <style name="Theme.ShadowRoutines" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
