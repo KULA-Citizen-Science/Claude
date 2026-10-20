@@ -29,6 +29,12 @@ the "Wall of Awful" are useful heuristics, and labelled as such).
 
 > NextQuest is a nudge tool, **not** medical advice, diagnosis, or treatment.
 
+## Web version
+
+`web/` holds the same app as an installable, offline-capable PWA (plain HTML/CSS/JS, no build step) —
+see [`web/README.md`](web/README.md). The Kotlin and JS engines are locked together by a shared
+golden file (`web/test/golden.txt`) that both test suites check.
+
 ## Project structure
 
 - `core/` — plain Kotlin/JVM module, **no Android dependency**. The entire taxonomy and reasoning

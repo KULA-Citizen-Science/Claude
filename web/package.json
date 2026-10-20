@@ -1,0 +1,12 @@
+{
+  "name": "nextquest-web",
+  "private": true,
+  "type": "module",
+  "description": "NextQuest PWA — static files, no build step. Serve this folder with any static server.",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "serve": "python3 -m http.server 8080",
+    "golden": "node test/golden.test.mjs --write",
+    "art": "python3 tools/gen-art.py"
+  }
+}
