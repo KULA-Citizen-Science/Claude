@@ -25,6 +25,21 @@ The folder is host-agnostic: all paths are relative and routes are hash-based (`
 `#/read/<quest>/<trap>`), so it works from a subpath (GitHub Pages, Codeberg Pages, any static
 bucket) with no server rewrites. Upload the contents of `web/`.
 
+### GitHub Pages (automated)
+
+`.github/workflows/pages.yml` publishes the app. On each push to `main` that touches `web/` (or
+when run manually from the Actions tab) it runs the web tests, stages only the runtime files (no
+tests or tools), checks that everything the service worker precaches is present
+(`tools/check-precache.mjs`), and deploys.
+
+One-time setup: repo **Settings → Pages → Build and deployment → Source: GitHub Actions**. The site
+then lives at `https://<owner>.github.io/<repo>/`. Pages only deploys from branches the
+`github-pages` environment allows (by default just `main`), so merge a feature branch to `main`
+before expecting it to publish.
+
+Moving to another host later: the workflow is the only GitHub-specific piece. Delete it and upload
+the same staged files (`index.html style.css manifest.webmanifest sw.js js/ icons/`).
+
 When you change any file, bump `CACHE` in `sw.js` so installed copies pick up the update.
 
 ## How it's built
