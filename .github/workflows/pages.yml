@@ -1,0 +1,64 @@
+# Deploys the NextQuest web app (web/) to GitHub Pages.
+#
+# One-time setup: repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Runs on pushes to main that touch web/, or manually from the Actions tab.
+# Pages deploys only from branches the github-pages environment allows (default: main), so a
+# feature branch must be merged to main before this can publish it.
+name: Deploy web app to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy mid-flight; queue the next one instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test the web engine and art
+        run: node --test "web/test/*.test.mjs"
+
+      # Publish only the runtime files — not tests, tools, or package.json.
+      - name: Stage site
+        run: |
+          mkdir _site
+          cp -r web/index.html web/style.css web/manifest.webmanifest web/sw.js web/js web/icons _site/
+          touch _site/.nojekyll
+
+      - name: Check the offline precache list is complete
+        run: node web/tools/check-precache.mjs _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

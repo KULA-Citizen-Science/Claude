@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1A56DB</color>
+    <!-- Keep in sync with Retro.Background in ui/theme/RetroTheme.kt -->
+    <color name="quest_background">#2B2140</color>
+    <color name="ic_launcher_background">#2B2140</color>
 </resources>

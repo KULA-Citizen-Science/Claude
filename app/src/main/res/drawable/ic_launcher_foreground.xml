@@ -4,13 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A simple stylus nib stroke on a page, standing in for a real launcher icon. -->
+    <!-- A little quest "treasure" gem sparkle, standing in for a real launcher icon. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,78 L74,34 L82,42 L38,86 L28,88 Z" />
+        android:fillColor="#FFC247"
+        android:pathData="M54,22 L86,54 L54,86 L22,54 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:pathData="M24,90 L30,78 L38,86 Z" />
+        android:fillColor="#F4E9D0"
+        android:pathData="M54,36 L72,54 L54,72 L36,54 Z" />
+    <path
+        android:fillColor="#49D6E0"
+        android:pathData="M54,44 L62,54 L54,64 L46,54 Z" />
 </vector>

@@ -1,0 +1,151 @@
+/* NextQuest — cozy-VGA / LucasArts palette. Mirrors Retro in app/.../ui/theme/RetroTheme.kt. */
+:root {
+  --bg: #2B2140;
+  --panel: #3B2E63;
+  --panel-alt: #4A3A7A;
+  --bevel-light: #7A68C0;
+  --bevel-dark: #160F2C;
+  --ink: #120C24;
+  --cream: #F4E9D0;
+  --cream-dim: #B9AECB;
+  --gold: #FFC247;
+  --cyan: #49D6E0;
+  --magenta: #E85AAD;
+  --lime: #9BE24A;
+  --danger: #FF6B5E;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body { margin: 0; background: var(--bg); }
+
+body {
+  min-height: 100dvh;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--cream);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Faint CRT scanlines over everything. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 3px);
+  z-index: 10;
+}
+
+#app { max-width: 480px; margin: 0 auto; }
+
+.screen { padding: 20px; display: flex; flex-direction: column; gap: 14px; min-height: 100dvh; }
+
+/* ---- bevelled VGA frame ---- */
+.bevel {
+  --fill: var(--panel);
+  background: var(--fill);
+  border: 2px solid var(--ink);
+  box-shadow: inset 3px 3px 0 var(--bevel-light), inset -3px -3px 0 var(--bevel-dark);
+}
+.bevel.inset { box-shadow: inset 3px 3px 0 var(--bevel-dark), inset -3px -3px 0 var(--bevel-light); }
+
+.panel { padding: 22px; color: var(--cream); }
+.panel p { margin: 8px 0 0; }
+
+/* ---- buttons ---- */
+.btn {
+  --fill: var(--panel-alt);
+  font: 700 16px/22px var(--mono);
+  color: var(--cream);
+  padding: 16px 22px;
+  text-align: center;
+  cursor: pointer;
+}
+.btn:active { transform: translateY(2px); box-shadow: inset 3px 3px 0 var(--bevel-dark), inset -3px -3px 0 var(--bevel-light); }
+.btn.block { width: 100%; }
+.btn.back { align-self: flex-start; padding: 12px 18px; }
+.gold-btn { --fill: var(--gold); color: var(--ink); }
+.magenta-btn { --fill: var(--magenta); color: var(--ink); }
+.cyan-btn { --fill: var(--cyan); color: var(--ink); }
+
+/* ---- type ---- */
+.heading { margin: 4px 0 0; font: 700 20px/26px var(--mono); letter-spacing: 1px; }
+.label { font: 700 12px/16px var(--mono); letter-spacing: 2px; }
+.small { font: 400 11px/16px var(--mono); letter-spacing: 1px; }
+.dim { color: var(--cream-dim); }
+.gold { color: var(--gold); }
+.cyan { color: var(--cyan); }
+.lime { color: var(--lime); }
+.danger { color: var(--danger); }
+.trap-text { font-weight: 700; margin: 8px 0 14px !important; }
+.escape-text { margin: 8px 0 0 !important; }
+
+/* ---- home ---- */
+.home { align-items: center; justify-content: center; text-align: center; gap: 0; padding: 28px; }
+.home > * { margin: 0; }
+.logo { display: flex; align-items: center; gap: 10px; }
+.title { display: flex; flex-direction: column; font: 700 34px/42px var(--mono); letter-spacing: 2px; }
+.spark { font: 700 20px/26px var(--mono); color: var(--magenta); animation: blink 0.9s steps(1) infinite; }
+.lead { margin: 0; }
+.home .logo { margin-bottom: 28px; }
+.home .mascot-lg { margin-bottom: 28px; }
+.home .lead { margin-bottom: 32px; }
+.home .small { margin-top: 24px; }
+
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes bob { from { transform: translateY(-2px); } to { transform: translateY(2px); } }
+
+/* ---- canvases ---- */
+canvas { display: block; }
+.sprite, .mascot { image-rendering: pixelated; image-rendering: crisp-edges; width: 100%; height: 100%; object-fit: contain; }
+.mascot-lg { width: 108px; height: 108px; animation: bob 1.4s ease-in-out infinite alternate; }
+.icon { width: 40px; height: 40px; }
+
+/* ---- picker ---- */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 22px 8px; color: var(--cream); font-family: var(--mono); text-align: center; cursor: pointer;
+}
+.card:active { transform: translateY(2px); box-shadow: inset 3px 3px 0 var(--bevel-dark), inset -3px -3px 0 var(--bevel-light); }
+
+.toggle {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: none; border: 0; padding: 7px 0; color: var(--cream); font: 400 16px/22px var(--mono);
+  text-align: left; cursor: pointer;
+}
+.box {
+  flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+  font-weight: 700; color: var(--ink);
+}
+.box.on { --fill: var(--lime); }
+#app .panel .btn { margin-top: 14px; }
+
+/* ---- reading scene ---- */
+.scene { position: relative; height: 196px; overflow: hidden; }
+.scene-bg { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
+.scene-prop { position: absolute; top: 14px; right: 18px; width: 64px; height: 64px; opacity: 0.28; }
+.scene-prop .icon { width: 100%; height: 100%; }
+.scene-hero { position: absolute; left: 14px; bottom: 22px; width: 62px; height: 62px; animation: bob 1.4s ease-in-out infinite alternate; }
+.scene-trap { position: absolute; left: 50%; top: 50%; width: 120px; height: 104px; transform: translate(-42%, -50%); }
+.scene-inv { position: absolute; right: 14px; bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.use { font: 400 11px/14px var(--mono); letter-spacing: 1px; color: var(--gold); }
+.slot { --fill: var(--bevel-dark); width: 52px; height: 52px; padding: 10px; }
+
+.chip { --fill: var(--panel-alt); display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; font: 700 12px/16px var(--mono); letter-spacing: 2px; }
+.mk-peer { color: var(--lime); }
+.mk-heur { color: var(--gold); }
+
+.legend { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.sw { width: 10px; height: 10px; display: inline-block; }
+.sw + .sw, .legend .sw:nth-of-type(2) { margin-left: 16px; }
+.lime-bg { background: var(--lime); }
+.gold-bg { background: var(--gold); }
+
+@media (prefers-reduced-motion: reduce) {
+  .spark, .mascot-lg, .scene-hero { animation: none; }
+}
